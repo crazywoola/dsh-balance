@@ -19,7 +19,7 @@ DeepSeek Harness 设置插件，用于查询 API 余额和当前可用模型。A
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-balance
+dsh plugin --profile web add @pinkbanana/dsh-balance
 dsh --profile web
 ```
 
