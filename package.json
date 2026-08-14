@@ -1,5 +1,5 @@
 {
-  "name": "dsh-balance",
+  "name": "@pinkbanana/dsh-balance",
   "version": "0.3.0",
   "description": "DeepSeek Harness plugin that shows API balances and available models in Settings",
   "repository": {
@@ -72,6 +72,9 @@
     "node": ">=20"
   },
   "packageManager": "pnpm@11.21.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

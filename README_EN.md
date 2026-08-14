@@ -19,7 +19,7 @@ A DeepSeek Harness Settings plugin for checking API balances and available model
 ## Install
 
 ```bash
-dsh plugin --profile web add dsh-balance
+dsh plugin --profile web add @pinkbanana/dsh-balance
 dsh --profile web
 ```
 
