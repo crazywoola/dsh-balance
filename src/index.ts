@@ -4,8 +4,9 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 import { BalanceQueryError, queryDeepSeekBalance } from './balance.ts'
-import { BALANCE_ROUTE } from './types.ts'
-import type { BalanceApiResponse, BalanceSuccess } from './types.ts'
+import { ModelQueryError, queryDeepSeekModels } from './models.ts'
+import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
+import type { BalanceApiResponse, BalanceSuccess, ModelsApiResponse, ModelsSuccess } from './types.ts'
 
 export const name = 'dsh-balance'
 export const inject = ['webServer', 'credentials']
@@ -45,7 +46,7 @@ function isLoopbackRequest(req: IncomingMessage): boolean {
   }
 }
 
-function sendJson(res: ServerResponse, status: number, body: BalanceApiResponse): void {
+function sendJson(res: ServerResponse, status: number, body: BalanceApiResponse | ModelsApiResponse): void {
   res.writeHead(status, {
     'cache-control': 'no-store',
     'content-type': 'application/json; charset=utf-8',
@@ -59,6 +60,7 @@ export function apply(ctx: Context, config: Config): void {
   validateBaseUrl(config.baseUrl)
   const ref = credentialRef(config.apiKeyRef)
   let cached: { expiresAt: number; value: BalanceSuccess } | undefined
+  let cachedModels: { expiresAt: number; value: ModelsSuccess } | undefined
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (req.method !== 'GET') {
@@ -112,11 +114,76 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
+  const modelsHandler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (req.method !== 'GET') {
+      res.setHeader('allow', 'GET')
+      sendJson(res, 405, { ok: false, code: 'METHOD_NOT_ALLOWED', message: '仅支持 GET 请求' })
+      return
+    }
+    if (!config.allowRemote && !isLoopbackRequest(req)) {
+      sendJson(res, 403, { ok: false, code: 'FORBIDDEN', message: '模型查询仅允许从本机访问' })
+      return
+    }
+
+    const requestUrl = new URL(req.url ?? MODELS_ROUTE, 'http://localhost')
+    const forceRefresh = requestUrl.searchParams.get('refresh') === '1'
+    if (!forceRefresh && cachedModels !== undefined && cachedModels.expiresAt > Date.now()) {
+      sendJson(res, 200, { ...cachedModels.value, source: 'cache' })
+      return
+    }
+
+    const credential = await ctx.credentials.resolve(ref)
+    if (credential === undefined) {
+      sendJson(res, 401, {
+        ok: false,
+        code: 'MISSING_API_KEY',
+        message: `未配置 ${config.apiKeyRef}，请先在“模型”设置中保存 DeepSeek API 密钥`,
+      })
+      return
+    }
+
+    try {
+      const result = await queryDeepSeekModels({
+        apiKey: credential.value,
+        baseUrl: config.baseUrl,
+        timeoutMs: config.timeoutMs,
+      })
+      const value: ModelsSuccess = {
+        ok: true,
+        models: result.models,
+        fetchedAt: new Date().toISOString(),
+        source: 'live',
+      }
+      cachedModels = { expiresAt: Date.now() + config.cacheMs, value }
+      sendJson(res, 200, value)
+    } catch (error) {
+      const failure = error instanceof ModelQueryError
+        ? error
+        : new ModelQueryError('UPSTREAM_ERROR', '查询模型时发生未知错误', 502, { cause: error })
+      ctx.logger.warn(failure)
+      sendJson(res, failure.httpStatus, { ok: false, code: failure.code, message: failure.message })
+    }
+  }
+
   ctx.effect(
     () => ctx.webServer.register({ kind: 'exact', path: BALANCE_ROUTE, handler }),
     `dsh-balance: ${BALANCE_ROUTE}`,
   )
+  ctx.effect(
+    () => ctx.webServer.register({ kind: 'exact', path: MODELS_ROUTE, handler: modelsHandler }),
+    `dsh-balance: ${MODELS_ROUTE}`,
+  )
 }
 
 export { BalanceQueryError, parseDeepSeekBalance, queryDeepSeekBalance } from './balance.ts'
-export type { BalanceApiResponse, BalanceFailure, BalanceInfo, BalanceSuccess } from './types.ts'
+export { ModelQueryError, parseDeepSeekModels, queryDeepSeekModels } from './models.ts'
+export type {
+  BalanceApiResponse,
+  BalanceFailure,
+  BalanceInfo,
+  BalanceSuccess,
+  ModelInfo,
+  ModelsApiResponse,
+  ModelsFailure,
+  ModelsSuccess,
+} from './types.ts'

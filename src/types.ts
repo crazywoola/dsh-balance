@@ -1,6 +1,9 @@
 /** The same-origin endpoint exposed by the plugin's Host half. */
 export const BALANCE_ROUTE = '/dsh-balance/api/balance'
 
+/** The same-origin endpoint that proxies DeepSeek's `/models` API. */
+export const MODELS_ROUTE = '/dsh-balance/api/models'
+
 /** One currency row returned by DeepSeek's `/user/balance` API. */
 export interface BalanceInfo {
   currency: string
@@ -18,7 +21,7 @@ export interface BalanceSuccess {
   source: 'live' | 'cache'
 }
 
-export type BalanceErrorCode =
+export type DeepSeekApiErrorCode =
   | 'FORBIDDEN'
   | 'INVALID_API_KEY'
   | 'INVALID_RESPONSE'
@@ -29,11 +32,31 @@ export type BalanceErrorCode =
   | 'UPSTREAM_TIMEOUT'
   | 'UPSTREAM_UNAVAILABLE'
 
+/** @deprecated Prefer the feature-neutral `DeepSeekApiErrorCode`. */
+export type BalanceErrorCode = DeepSeekApiErrorCode
+
 /** A failed, browser-safe response. It intentionally contains no upstream body or credential. */
 export interface BalanceFailure {
   ok: false
-  code: BalanceErrorCode
+  code: DeepSeekApiErrorCode
   message: string
 }
 
 export type BalanceApiResponse = BalanceSuccess | BalanceFailure
+
+/** One model returned by DeepSeek's `/models` API. */
+export interface ModelInfo {
+  id: string
+  ownedBy: string
+}
+
+/** A successful, browser-safe model-list response. */
+export interface ModelsSuccess {
+  ok: true
+  models: ModelInfo[]
+  fetchedAt: string
+  source: 'live' | 'cache'
+}
+
+export type ModelsFailure = BalanceFailure
+export type ModelsApiResponse = ModelsSuccess | ModelsFailure

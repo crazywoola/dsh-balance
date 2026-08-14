@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 
 const port = Number.parseInt(process.env.DSH_BALANCE_MOCK_PORT ?? '3091', 10)
 const server = createServer((req, res) => {
-  if (req.method !== 'GET' || req.url !== '/user/balance') {
+  if (req.method !== 'GET' || (req.url !== '/user/balance' && req.url !== '/models')) {
     res.writeHead(404)
     res.end()
     return
@@ -12,6 +12,19 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ error: { message: 'invalid test key' } }))
     return
   }
+
+  if (req.url === '/models') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({
+      object: 'list',
+      data: [
+        { id: 'deepseek-v4-flash', object: 'model', owned_by: 'deepseek' },
+        { id: 'deepseek-v4-pro', object: 'model', owned_by: 'deepseek' },
+      ],
+    }))
+    return
+  }
+
   res.writeHead(200, { 'content-type': 'application/json' })
   res.end(JSON.stringify({
     is_available: true,

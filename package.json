@@ -1,7 +1,7 @@
 {
   "name": "dsh-balance",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness plugin that shows the current DeepSeek API balance in Settings",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness plugin that shows API balances and available models in Settings",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/crazywoola/dsh-balance.git"
@@ -15,7 +15,8 @@
     "deepseek-harness",
     "dsh-plugin",
     "dsh-plugins",
-    "balance"
+    "balance",
+    "models"
   ],
   "type": "module",
   "main": "./lib/index.js",
@@ -37,6 +38,7 @@
     "lib/client.js",
     "lib/client.js.map",
     "lib/types/**/*.d.ts",
+    "docs/*.jpg",
     "cordis.patch.yml",
     "LICENSE",
     "README.md"

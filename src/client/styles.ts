@@ -58,4 +58,31 @@ export const balanceStyles = `
 .dsh-balance-breakdown dt { color: var(--dsw-alias-label-tertiary); }
 .dsh-balance-breakdown dd { margin: 0; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .dsh-balance-meta { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-models-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 760px;
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-model-count { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dsh-model-count .dsh-balance-dot { background: var(--dsw-alias-state-success-primary); }
+.dsh-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.dsh-model-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--dsw-alias-bg-layer-3);
+}
+.dsh-model-id {
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.dsh-model-owner { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 `

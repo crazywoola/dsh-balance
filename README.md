@@ -1,8 +1,10 @@
 # dsh-balance
 
-在 DeepSeek Harness 的“设置 → 插件”中增加 **DeepSeek 余额**页签。Host 端使用 Harness 已保存的 `DEEPSEEK_API_KEY` 请求官方 `/user/balance` 接口，浏览器只接收余额结果，永远不会读取 API Key。
+在 DeepSeek Harness 的“设置 → 插件”中增加 **DeepSeek 余额**和 **DeepSeek 模型**页签。Host 端使用 Harness 已保存的 `DEEPSEEK_API_KEY` 请求官方 `/user/balance` 与 `/models` 接口，浏览器只接收展示结果，永远不会读取 API Key。
 
 ![DeepSeek 余额插件界面](./docs/dsh-balance-settings.jpg)
+
+![DeepSeek 模型插件界面](./docs/dsh-models-settings.jpg)
 
 ## 快速开始
 
@@ -11,15 +13,16 @@ dsh plugin --profile web add dsh-balance
 dsh --profile web
 ```
 
-打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置 `DEEPSEEK_API_KEY`。
+打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额 / DeepSeek 模型”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置 `DEEPSEEK_API_KEY`。
 
 ## 功能
 
 - 展示账户是否仍可调用 API。
 - 分币种展示总余额、充值余额和赠送余额。
-- 30 秒 Host 端缓存与手动强制刷新。
+- 展示当前 API Key 可访问的全部模型及其所属组织。
+- 余额和模型列表分别使用 30 秒 Host 端缓存，并支持手动强制刷新。
 - 复用 Harness 凭据服务，支持环境变量和“模型”设置中保存的密钥。
-- 默认仅允许从本机打开余额接口；上游默认只允许 HTTPS。
+- 默认仅允许从本机打开插件接口；上游默认只允许 HTTPS。
 - 缺少密钥、密钥无效、限流、超时和上游异常都有独立提示。
 
 ## 开发
@@ -44,7 +47,7 @@ dsh plugin --profile web add .
 dsh --profile web
 ```
 
-打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置：
+打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额 / DeepSeek 模型”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置：
 
 ```bash
 export DEEPSEEK_API_KEY='sk-...'
@@ -54,7 +57,7 @@ export DEEPSEEK_API_KEY='sk-...'
 
 ```bash
 pnpm pack:plugin
-dsh plugin --profile web add ./dsh-balance-0.1.0.tgz
+dsh plugin --profile web add ./dsh-balance-0.2.0.tgz
 ```
 
 ## 配置
@@ -83,7 +86,7 @@ DEEPSEEK_API_KEY=dsh-balance-test-key \
   dsh --patch ./tests/cordis.mock.yml --profile web
 ```
 
-模拟数据应显示人民币 `¥128.50` 与美元 `US$18.25`。
+模拟数据应显示人民币 `¥128.50`、美元 `US$18.25`，以及 `deepseek-v4-flash`、`deepseek-v4-pro` 两个模型。
 
 ## License
 
