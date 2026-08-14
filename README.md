@@ -6,18 +6,9 @@
 
 ## 快速开始
 
-已全局安装 DSH：
-
 ```bash
 dsh plugin --profile web add dsh-balance
 dsh --profile web
-```
-
-也可以不全局安装 DSH，直接从 GitHub 安装：
-
-```bash
-pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 plugin --profile web add github:crazywoola/dsh-balance
-pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 --profile web
 ```
 
 打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置 `DEEPSEEK_API_KEY`。
@@ -33,7 +24,7 @@ pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 --profile web
 
 ## 开发
 
-要求 Node.js 20+ 与 pnpm 11：
+要求已安装 DSH，并使用 Node.js 20+ 与 pnpm 11：
 
 ```bash
 pnpm install
@@ -49,8 +40,8 @@ pnpm check
 ```bash
 pnpm install
 pnpm build
-pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 plugin --profile web add .
-pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 web
+dsh plugin --profile web add .
+dsh --profile web
 ```
 
 打开 <http://127.0.0.1:3080/>，进入“设置 → 插件 → DeepSeek 余额”。如果尚未配置密钥，请先在“设置 → 模型”中保存 DeepSeek API Key，或在启动前设置：
@@ -63,7 +54,7 @@ export DEEPSEEK_API_KEY='sk-...'
 
 ```bash
 pnpm pack:plugin
-pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 plugin --profile web add ./dsh-balance-0.1.0.tgz
+dsh plugin --profile web add ./dsh-balance-0.1.0.tgz
 ```
 
 ## 配置
@@ -89,7 +80,7 @@ pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 plugin --profile web add ./dsh-balance-0.1.
 ```bash
 node scripts/mock-deepseek-api.mjs
 DEEPSEEK_API_KEY=dsh-balance-test-key \
-  pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 web --patch ./tests/cordis.mock.yml
+  dsh --patch ./tests/cordis.mock.yml --profile web
 ```
 
 模拟数据应显示人民币 `¥128.50` 与美元 `US$18.25`。
