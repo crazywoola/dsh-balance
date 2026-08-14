@@ -6,6 +6,15 @@
 
 ## 快速开始
 
+已全局安装 DSH：
+
+```bash
+dsh plugin --profile web add dsh-balance
+dsh --profile web
+```
+
+也可以不全局安装 DSH，直接从 GitHub 安装：
+
 ```bash
 pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 plugin --profile web add github:crazywoola/dsh-balance
 pnpm dlx @deepseek-ai/dsh@0.1.0-rc.6 --profile web
