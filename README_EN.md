@@ -13,6 +13,7 @@ A DeepSeek Harness Settings plugin for checking API balances and available model
 - View total, topped-up, and granted balances
 - View models available to the current API key
 - Cache query results with manual refresh support
+- Native Simplified Chinese and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness
 
 ## Install
