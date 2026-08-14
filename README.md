@@ -1,5 +1,7 @@
 # dsh-balance
 
+[简体中文](./README.md) | [English](./README_EN.md)
+
 DeepSeek Harness 设置插件，用于查询 API 余额和当前可用模型。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
 ![DeepSeek 余额插件界面](./docs/dsh-balance-settings.jpg)
