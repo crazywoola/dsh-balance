@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BalanceApiResponse, BalanceInfo } from '../types.ts'
+import { errorLocaleKey } from './locales.ts'
+import type { LOCALE_NS } from './locales.ts'
 
 export interface BalanceTabInjected {
   loadBalance: (forceRefresh: boolean, signal: AbortSignal) => Promise<BalanceApiResponse>
 }
 
-export type BalanceTabProps = PropsRuntime<'settings.plugins.tab'> & InjectFace<BalanceTabInjected>
+export type BalanceTabProps = PropsRuntime<'settings.plugins.tab'> & InjectFace<BalanceTabInjected> & PropsLocale<typeof LOCALE_NS>
 
-function displayAmount(value: string, currency: string): string {
+function displayAmount(value: string, currency: string, locale: string): string {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return `${value} ${currency}`
   try {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       minimumFractionDigits: 2,
@@ -23,24 +25,24 @@ function displayAmount(value: string, currency: string): string {
   }
 }
 
-function BalanceCard({ info }: { info: BalanceInfo }) {
+function BalanceCard({ info, t }: { info: BalanceInfo; t: BalanceTabProps['t'] }) {
   return (
     <article className="dsh-balance-card">
       <div className="dsh-balance-card-head">
         <span className="dsh-balance-currency">{info.currency}</span>
       </div>
-      <p className="dsh-balance-total">{displayAmount(info.totalBalance, info.currency)}</p>
+      <p className="dsh-balance-total">{displayAmount(info.totalBalance, info.currency, t('locale.tag'))}</p>
       <dl className="dsh-balance-breakdown">
-        <dt>充值余额</dt>
-        <dd>{displayAmount(info.toppedUpBalance, info.currency)}</dd>
-        <dt>赠送余额</dt>
-        <dd>{displayAmount(info.grantedBalance, info.currency)}</dd>
+        <dt>{t('balance.toppedUp')}</dt>
+        <dd>{displayAmount(info.toppedUpBalance, info.currency, t('locale.tag'))}</dd>
+        <dt>{t('balance.granted')}</dt>
+        <dd>{displayAmount(info.grantedBalance, info.currency, t('locale.tag'))}</dd>
       </dl>
     </article>
   )
 }
 
-export function BalanceTab({ loadBalance }: BalanceTabProps) {
+export function BalanceTab({ loadBalance, t }: BalanceTabProps) {
   const [result, setResult] = useState<BalanceApiResponse>()
   const [loading, setLoading] = useState(true)
 
@@ -53,7 +55,7 @@ export function BalanceTab({ loadBalance }: BalanceTabProps) {
       setResult({
         ok: false,
         code: 'UPSTREAM_UNAVAILABLE',
-        message: error instanceof Error ? error.message : '无法读取余额',
+        message: error instanceof Error ? error.message : '',
       })
     } finally {
       if (!signal.aborted) setLoading(false)
@@ -75,27 +77,27 @@ export function BalanceTab({ loadBalance }: BalanceTabProps) {
     <section className="dsh-balance-tab" aria-labelledby="dsh-balance-title">
       <div className="dsh-balance-summary">
         <div>
-          <h2 id="dsh-balance-title" className="dsh-balance-heading">DeepSeek API 余额</h2>
-          <p className="dsh-balance-copy">余额由本机 Host 使用已保存的 API 密钥查询，密钥不会发送到浏览器。</p>
+          <h2 id="dsh-balance-title" className="dsh-balance-heading">{t('balance.title')}</h2>
+          <p className="dsh-balance-copy">{t('balance.copy')}</p>
         </div>
         <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={refresh}>
-          {loading ? '查询中…' : '刷新余额'}
+          {loading ? t('action.loading') : t('balance.refresh')}
         </button>
       </div>
 
-      {loading && result === undefined ? <p className="dsh-balance-status" role="status">正在查询 DeepSeek 账户余额…</p> : null}
-      {result?.ok === false ? <p className="dsh-balance-error" role="alert">{result.message}</p> : null}
+      {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('balance.loading')}</p> : null}
+      {result?.ok === false ? <p className="dsh-balance-error" role="alert">{t(errorLocaleKey(result.code))}</p> : null}
       {result?.ok === true ? (
         <>
           <div className="dsh-balance-availability" data-available={String(result.isAvailable)}>
             <span className="dsh-balance-dot" aria-hidden="true" />
-            <span>{result.isAvailable ? '当前账户有可用余额' : '当前账户没有可用余额'}</span>
+            <span>{t(result.isAvailable ? 'balance.available' : 'balance.unavailable')}</span>
           </div>
           {result.balanceInfos.length > 0
-            ? <div className="dsh-balance-grid">{result.balanceInfos.map(info => <BalanceCard key={info.currency} info={info} />)}</div>
-            : <p className="dsh-balance-status">DeepSeek 未返回任何币种余额。</p>}
+            ? <div className="dsh-balance-grid">{result.balanceInfos.map(info => <BalanceCard key={info.currency} info={info} t={t} />)}</div>
+            : <p className="dsh-balance-status">{t('balance.empty')}</p>}
           <p className="dsh-balance-meta">
-            更新于 {new Date(result.fetchedAt).toLocaleString('zh-CN')}{result.source === 'cache' ? ' · 缓存' : ''}
+            {t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}
           </p>
         </>
       ) : null}

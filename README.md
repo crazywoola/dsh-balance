@@ -13,6 +13,7 @@ DeepSeek Harness 设置插件，用于查询 API 余额和当前可用模型。A
 - 查看总余额、充值余额和赠送余额
 - 查看当前 API Key 可用的模型
 - 缓存查询结果并支持手动刷新
+- 原生支持简体中文和英文，并跟随 Harness 系统语言切换
 - 支持 Harness 已保存的 `DEEPSEEK_API_KEY`
 
 ## 安装
