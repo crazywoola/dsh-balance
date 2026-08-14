@@ -1,0 +1,7 @@
+- id: dsh-balance
+  config:
+    apiKeyRef: DEEPSEEK_API_KEY
+    baseUrl: http://127.0.0.1:3091
+    timeoutMs: 5000
+    cacheMs: 30000
+    allowRemote: false

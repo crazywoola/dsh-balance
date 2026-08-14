@@ -1,0 +1,6 @@
+node_modules/
+lib/
+coverage/
+*.tgz
+.DS_Store
+pnpm-debug.log*
