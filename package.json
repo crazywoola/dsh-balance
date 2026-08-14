@@ -1,6 +1,6 @@
 {
   "name": "@pinkbanana/dsh-balance",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DeepSeek Harness plugin that shows API balances and available models in Settings",
   "repository": {
     "type": "git",
