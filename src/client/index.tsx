@@ -1,16 +1,19 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { BalanceApiResponse, ModelsApiResponse } from '../types.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from '../types.ts'
-import { BalanceTab } from './BalanceTab.tsx'
-import type { BalanceTabInjected } from './BalanceTab.tsx'
-import { ModelsTab } from './ModelsTab.tsx'
-import type { ModelsTabInjected } from './ModelsTab.tsx'
+import { BalanceDock } from './BalanceDock.tsx'
+import type { BalanceDockInjected } from './BalanceDock.tsx'
+import { DeepSeekPanel } from './DeepSeekPanel.tsx'
+import type { DeepSeekPanelInjected } from './DeepSeekPanel.tsx'
 import { en, LOCALE_NS, zh } from './locales.ts'
 import { balanceStyles } from './styles.ts'
 
 export type { BalanceTabInjected, BalanceTabProps } from './BalanceTab.tsx'
+export type { BalanceDockInjected, BalanceDockProps } from './BalanceDock.tsx'
+export type { DeepSeekPanelInjected, DeepSeekPanelProps } from './DeepSeekPanel.tsx'
 export type { ModelsTabInjected, ModelsTabProps } from './ModelsTab.tsx'
 
 export const inject = ['slots', 'locale']
@@ -45,7 +48,7 @@ async function loadModels(forceRefresh: boolean, signal: AbortSignal): Promise<M
   return value as ModelsApiResponse
 }
 
-/** Register one feature-owned page inside the existing Plugins settings section. */
+/** Register a standalone Settings page and an ambient composer balance readout. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => ctx.locale.register(LOCALE_NS, { zh, en }),
@@ -62,20 +65,20 @@ export function apply(ctx: ClientContext): void {
     return () => { style.remove() }
   }, 'dsh-balance: styles')
 
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
     id: 'deepseek-balance',
-    order: 20,
-    label: () => t('tab.balance'),
-    locale: LOCALE_NS,
-    inject: (): BalanceTabInjected => ({ loadBalance }),
-  }, BalanceTab))
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
-    id: 'deepseek-models',
     order: 21,
-    label: () => t('tab.models'),
+    label: () => t('nav.balance'),
     locale: LOCALE_NS,
-    inject: (): ModelsTabInjected => ({ loadModels }),
-  }, ModelsTab))
+    inject: (): DeepSeekPanelInjected => ({ loadBalance, loadModels }),
+  }, DeepSeekPanel))
+
+  ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+    name: 'conversation.composer.dock',
+    id: 'deepseek-balance',
+    order: 10,
+    locale: LOCALE_NS,
+    inject: (): BalanceDockInjected => ({ loadBalance }),
+  }, BalanceDock))
 }
