@@ -6,8 +6,7 @@ export const LOCALE_NS = 'dsh-balance'
 /** Simplified Chinese dictionary and source of truth for the namespace key set. */
 export const zh = {
   'locale.tag': 'zh-CN',
-  'tab.balance': 'DeepSeek 余额',
-  'tab.models': 'DeepSeek 模型',
+  'nav.balance': 'DeepSeek 余额',
   'action.loading': '查询中…',
   'balance.title': 'DeepSeek API 余额',
   'balance.copy': '余额由本机 Host 使用已保存的 API 密钥查询，密钥不会发送到浏览器。',
@@ -18,6 +17,10 @@ export const zh = {
   'balance.empty': 'DeepSeek 未返回任何币种余额。',
   'balance.toppedUp': '充值余额',
   'balance.granted': '赠送余额',
+  'dock.label': 'DeepSeek 余额',
+  'dock.loading': '查询中…',
+  'dock.unavailable': '暂时无法获取',
+  'dock.empty': '暂无余额信息',
   'models.title': 'DeepSeek 可用模型',
   'models.copy': '从 DeepSeek 官方 /models 接口读取当前 API Key 可访问的模型。',
   'models.refresh': '刷新模型',
@@ -50,8 +53,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** English dictionary, checked complete against the Chinese key set. */
 export const en: LocaleDictOf<typeof LOCALE_NS> = {
   'locale.tag': 'en-US',
-  'tab.balance': 'DeepSeek Balance',
-  'tab.models': 'DeepSeek Models',
+  'nav.balance': 'DeepSeek Balance',
   'action.loading': 'Loading…',
   'balance.title': 'DeepSeek API Balance',
   'balance.copy': 'The local Host queries your balance with the saved API key. The key is never sent to the browser.',
@@ -62,6 +64,10 @@ export const en: LocaleDictOf<typeof LOCALE_NS> = {
   'balance.empty': 'DeepSeek returned no currency balances.',
   'balance.toppedUp': 'Topped-up balance',
   'balance.granted': 'Granted balance',
+  'dock.label': 'DeepSeek Balance',
+  'dock.loading': 'Loading…',
+  'dock.unavailable': 'Temporarily unavailable',
+  'dock.empty': 'No balance information',
   'models.title': 'Available DeepSeek Models',
   'models.copy': 'Lists the models available to the current API key using the official DeepSeek /models endpoint.',
   'models.refresh': 'Refresh models',

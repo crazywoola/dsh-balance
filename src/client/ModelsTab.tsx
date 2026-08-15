@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelInfo, ModelsApiResponse } from '../types.ts'
 import { errorLocaleKey } from './locales.ts'
 import type { LOCALE_NS } from './locales.ts'
@@ -8,7 +8,7 @@ export interface ModelsTabInjected {
   loadModels: (forceRefresh: boolean, signal: AbortSignal) => Promise<ModelsApiResponse>
 }
 
-export type ModelsTabProps = PropsRuntime<'settings.plugins.tab'> & InjectFace<ModelsTabInjected> & PropsLocale<typeof LOCALE_NS>
+export type ModelsTabProps = ModelsTabInjected & PropsLocale<typeof LOCALE_NS>
 
 function ModelCard({ model, t }: { model: ModelInfo; t: ModelsTabProps['t'] }) {
   return (
@@ -19,7 +19,7 @@ function ModelCard({ model, t }: { model: ModelInfo; t: ModelsTabProps['t'] }) {
   )
 }
 
-export function ModelsTab({ loadModels, t }: ModelsTabProps) {
+export function ModelsSection({ loadModels, t }: ModelsTabProps) {
   const [result, setResult] = useState<ModelsApiResponse>()
   const [loading, setLoading] = useState(true)
 
@@ -51,7 +51,7 @@ export function ModelsTab({ loadModels, t }: ModelsTabProps) {
   }
 
   return (
-    <section className="dsh-models-tab" aria-labelledby="dsh-models-title">
+    <section className="dsh-models-section" aria-labelledby="dsh-models-title">
       <div className="dsh-balance-summary">
         <div>
           <h2 id="dsh-models-title" className="dsh-balance-heading">{t('models.title')}</h2>
@@ -81,3 +81,6 @@ export function ModelsTab({ loadModels, t }: ModelsTabProps) {
     </section>
   )
 }
+
+/** @deprecated The model view is now part of the standalone DeepSeek settings panel. */
+export const ModelsTab = ModelsSection

@@ -1,10 +1,20 @@
 export const balanceStyles = `
-.dsh-balance-tab {
+.dsh-deepseek-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 720px;
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-balance-section,
+.dsh-models-section {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-width: 760px;
-  color: var(--dsw-alias-label-primary);
+}
+.dsh-deepseek-divider {
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
 }
 .dsh-balance-summary {
   display: flex;
@@ -12,15 +22,16 @@ export const balanceStyles = `
   justify-content: space-between;
   gap: 16px;
 }
-.dsh-balance-heading { margin: 0; font-size: 18px; font-weight: 600; }
+.dsh-balance-heading { margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; }
 .dsh-balance-copy { margin: 4px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 1.5; }
 .dsh-balance-refresh {
   flex: none;
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 6px 13px;
-  background: var(--dsw-alias-bg-layer-3);
+  border-radius: 16px;
+  min-height: 32px;
+  padding: 0 14px;
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
@@ -58,13 +69,6 @@ export const balanceStyles = `
 .dsh-balance-breakdown dt { color: var(--dsw-alias-label-tertiary); }
 .dsh-balance-breakdown dd { margin: 0; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .dsh-balance-meta { margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
-.dsh-models-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 760px;
-  color: var(--dsw-alias-label-primary);
-}
 .dsh-model-count { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .dsh-model-count .dsh-balance-dot { background: var(--dsw-alias-state-success-primary); }
 .dsh-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
@@ -85,4 +89,44 @@ export const balanceStyles = `
   overflow-wrap: anywhere;
 }
 .dsh-model-owner { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-balance-dock {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: var(--dsh-chat-content-width);
+  margin: 0 auto;
+  padding: 4px calc(var(--dsh-composer-side-clearance) + 16px) 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsh-balance-dock-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-label-dimmed);
+  vertical-align: 1px;
+}
+.dsh-balance-dock-dot[data-state='available'] { background: var(--dsw-alias-state-success-primary); }
+.dsh-balance-dock-dot[data-state='empty'],
+.dsh-balance-dock-dot[data-state='error'] { background: var(--dsw-alias-state-error-primary); }
+.dsh-balance-dock-separator {
+  margin: 0 10px;
+  color: var(--dsw-alias-separator-primary);
+}
+.dsh-balance-dock-value {
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .dsh-balance-summary { align-items: flex-start; }
+  .dsh-balance-grid,
+  .dsh-model-grid { grid-template-columns: 1fr; }
+}
 `

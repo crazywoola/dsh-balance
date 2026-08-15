@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BalanceApiResponse, BalanceInfo } from '../types.ts'
+import { displayAmount } from './format.ts'
 import { errorLocaleKey } from './locales.ts'
 import type { LOCALE_NS } from './locales.ts'
 
@@ -8,22 +9,7 @@ export interface BalanceTabInjected {
   loadBalance: (forceRefresh: boolean, signal: AbortSignal) => Promise<BalanceApiResponse>
 }
 
-export type BalanceTabProps = PropsRuntime<'settings.plugins.tab'> & InjectFace<BalanceTabInjected> & PropsLocale<typeof LOCALE_NS>
-
-function displayAmount(value: string, currency: string, locale: string): string {
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return `${value} ${currency}`
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 8,
-    }).format(amount)
-  } catch {
-    return `${value} ${currency}`
-  }
-}
+export type BalanceTabProps = BalanceTabInjected & PropsLocale<typeof LOCALE_NS>
 
 function BalanceCard({ info, t }: { info: BalanceInfo; t: BalanceTabProps['t'] }) {
   return (
@@ -42,7 +28,7 @@ function BalanceCard({ info, t }: { info: BalanceInfo; t: BalanceTabProps['t'] }
   )
 }
 
-export function BalanceTab({ loadBalance, t }: BalanceTabProps) {
+export function BalanceSection({ loadBalance, t }: BalanceTabProps) {
   const [result, setResult] = useState<BalanceApiResponse>()
   const [loading, setLoading] = useState(true)
 
@@ -74,7 +60,7 @@ export function BalanceTab({ loadBalance, t }: BalanceTabProps) {
   }
 
   return (
-    <section className="dsh-balance-tab" aria-labelledby="dsh-balance-title">
+    <section className="dsh-balance-section" aria-labelledby="dsh-balance-title">
       <div className="dsh-balance-summary">
         <div>
           <h2 id="dsh-balance-title" className="dsh-balance-heading">{t('balance.title')}</h2>
@@ -104,3 +90,6 @@ export function BalanceTab({ loadBalance, t }: BalanceTabProps) {
     </section>
   )
 }
+
+/** @deprecated The balance view is no longer rendered as a Plugins tab. */
+export const BalanceTab = BalanceSection
