@@ -1,3 +1,7 @@
+export function formatClockTime(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date)
+}
+
 export function displayAmount(value: string, currency: string, locale: string): string {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return `${value} ${currency}`

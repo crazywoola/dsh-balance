@@ -14,6 +14,7 @@ A DeepSeek Harness plugin for checking API balances and available models. The AP
 - Keep a compact balance summary below the chat composer
 - View models available to the current API key
 - Cache query results with manual refresh support
+- Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00, 14:00–18:00 Beijing time)
 - Native Simplified Chinese and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness
 

@@ -114,6 +114,7 @@ export const balanceStyles = `
   vertical-align: 1px;
 }
 .dsh-balance-dock-dot[data-state='available'] { background: var(--dsw-alias-state-success-primary); }
+.dsh-balance-dock-dot[data-state='available'][data-peak='true'] { background: var(--dsw-alias-state-warn-primary); }
 .dsh-balance-dock-dot[data-state='empty'],
 .dsh-balance-dock-dot[data-state='error'] { background: var(--dsw-alias-state-error-primary); }
 .dsh-balance-dock-separator {
