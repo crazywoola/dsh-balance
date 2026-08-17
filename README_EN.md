@@ -21,7 +21,7 @@ A DeepSeek Harness plugin for checking API balances and available models. The AP
 ## Install
 
 ```bash
-dsh plugin --profile web add @pinkbanana/dsh-balance
+dsh plugin --profile web add @pinkbanana/dsh-balance@latest
 dsh --profile web
 ```
 

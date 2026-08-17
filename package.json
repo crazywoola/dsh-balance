@@ -1,6 +1,6 @@
 {
   "name": "@pinkbanana/dsh-balance",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "DeepSeek Harness plugin that shows API balances and models in Settings, with balance below the chat composer",
   "repository": {
     "type": "git",
