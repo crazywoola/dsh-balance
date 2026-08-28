@@ -2,7 +2,7 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-A DeepSeek Harness plugin for checking API balances and available models. The API key is used only by the local Host and is never sent to the browser.
+A DeepSeek Harness plugin for checking API balances, available models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
 
 ![DeepSeek balance settings panel](./docs/dsh-balance-settings-v040.png)
 
@@ -13,6 +13,10 @@ A DeepSeek Harness plugin for checking API balances and available models. The AP
 - View total, topped-up, and granted balances
 - Keep a compact balance summary below the chat composer
 - View models available to the current API key
+- View actual usage costs by model, session, and day in Settings, plus request details in the current session's Usage tab
+- Mark missing usage, unknown providers, and unknown models as unpriced without estimating tokens
+- Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time
+- Show USD by default, with optional fixed-rate CNY conversion through `usdToCny`
 - Cache query results with manual refresh support
 - Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00, 14:00–18:00 Beijing time)
 - Native Simplified Chinese and English that follows the Harness system language
@@ -26,6 +30,12 @@ dsh --profile web
 ```
 
 Open <http://127.0.0.1:3080/> and go to Settings → DeepSeek Balance. The panel sits directly below Agent presets, and the balance summary also appears below the composer in existing sessions. Save the API key in Settings → Models or provide it through the `DEEPSEEK_API_KEY` environment variable.
+
+Usage statistics read saved sessions and prefer the current live session. Prompt content is never exposed. To show a fixed-rate CNY conversion, add for example:
+
+```yaml
+usdToCny: 7.2
+```
 
 ## Development
 

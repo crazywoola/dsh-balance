@@ -1,7 +1,7 @@
 {
   "name": "@pinkbanana/dsh-balance",
-  "version": "0.4.1",
-  "description": "DeepSeek Harness plugin that shows API balances and models in Settings, with balance below the chat composer",
+  "version": "0.5.0",
+  "description": "DeepSeek Harness plugin for API balances, models, and multidimensional usage billing",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/crazywoola/dsh-balance.git"
@@ -16,7 +16,9 @@
     "dsh-plugin",
     "dsh-plugins",
     "balance",
-    "models"
+    "models",
+    "usage",
+    "billing"
   ],
   "type": "module",
   "main": "./lib/index.js",
@@ -85,6 +87,8 @@
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-credentials": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-persistence": "0.1.0-rc.6",
     "react": "^18.2.0"
   },
   "dependencies": {
@@ -99,6 +103,8 @@
     "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.6",
     "@deepseek-ai/dsh-credentials": "0.1.0-rc.6",
     "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-persistence": "0.1.0-rc.6",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.0",
     "@types/react": "^18.3.27",

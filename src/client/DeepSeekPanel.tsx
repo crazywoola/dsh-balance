@@ -4,20 +4,24 @@ import type { BalanceTabInjected } from './BalanceTab.tsx'
 import type { LOCALE_NS } from './locales.ts'
 import { ModelsSection } from './ModelsTab.tsx'
 import type { ModelsTabInjected } from './ModelsTab.tsx'
+import { BillingOverview } from './BillingTab.tsx'
+import type { UsageTabInjected } from './BillingTab.tsx'
 
-export interface DeepSeekPanelInjected extends BalanceTabInjected, ModelsTabInjected {}
+export interface DeepSeekPanelInjected extends BalanceTabInjected, ModelsTabInjected, UsageTabInjected {}
 
 export type DeepSeekPanelProps = PropsRuntime<'settings.section'>
   & InjectFace<DeepSeekPanelInjected>
   & PropsLocale<typeof LOCALE_NS>
 
 /** Standalone DeepSeek settings page, placed immediately after Agent presets. */
-export function DeepSeekPanel({ loadBalance, loadModels, t }: DeepSeekPanelProps) {
+export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSeekPanelProps) {
   return (
     <div className="dsh-deepseek-panel">
       <BalanceSection loadBalance={loadBalance} t={t} />
       <div className="dsh-deepseek-divider" aria-hidden="true" />
       <ModelsSection loadModels={loadModels} t={t} />
+      <div className="dsh-deepseek-divider" aria-hidden="true" />
+      <BillingOverview loadUsage={loadUsage} t={t} />
     </div>
   )
 }
