@@ -1,90 +1,99 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BalanceApiResponse, BalanceInfo } from '../types.ts'
+import { findBalanceProvider } from '../providers.ts'
+import type { BalanceProviderId } from '../providers.ts'
 import { displayAmount } from './format.ts'
 import { errorLocaleKey } from './locales.ts'
-import type { LOCALE_NS } from './locales.ts'
+import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
 
 export interface BalanceTabInjected {
-  loadBalance: (forceRefresh: boolean, signal: AbortSignal) => Promise<BalanceApiResponse>
+  loadBalance: (forceRefresh: boolean, signal: AbortSignal, provider?: BalanceProviderId) => Promise<BalanceApiResponse>
 }
 
-export type BalanceTabProps = BalanceTabInjected & PropsLocale<typeof LOCALE_NS>
+export type BalanceTabProps = BalanceTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: BalanceProviderId }
 
 function BalanceCard({ info, t }: { info: BalanceInfo; t: BalanceTabProps['t'] }) {
+  const details: [DshBalanceLocaleKey, string | undefined][] = [
+    ['balance.toppedUp', info.toppedUpBalance],
+    ['balance.granted', info.grantedBalance],
+    ['balance.totalCash', info.totalCashBalance],
+    ['balance.totalVoucher', info.totalVoucherBalance],
+  ]
   return (
     <article className="dsh-balance-card">
       <div className="dsh-balance-card-head">
-        <span className="dsh-balance-currency">{info.currency}</span>
+        <span>{t('balance.availableAmount')}</span><span className="dsh-balance-currency">{info.currency}</span>
       </div>
       <p className="dsh-balance-total">{displayAmount(info.totalBalance, info.currency, t('locale.tag'))}</p>
       <dl className="dsh-balance-breakdown">
-        <dt>{t('balance.toppedUp')}</dt>
-        <dd>{displayAmount(info.toppedUpBalance, info.currency, t('locale.tag'))}</dd>
-        <dt>{t('balance.granted')}</dt>
-        <dd>{displayAmount(info.grantedBalance, info.currency, t('locale.tag'))}</dd>
+        {details.filter(([, value]) => value !== undefined).map(([label, value]) => (
+          <div key={label}><dt>{t(label)}</dt><dd>{displayAmount(value!, info.currency, t('locale.tag'))}</dd></div>
+        ))}
       </dl>
     </article>
   )
 }
 
-export function BalanceSection({ loadBalance, t }: BalanceTabProps) {
+export function BalanceSection({ loadBalance, t, provider = 'deepseek' }: BalanceTabProps) {
   const [result, setResult] = useState<BalanceApiResponse>()
   const [loading, setLoading] = useState(true)
+  const active = useRef<AbortController>()
+  const providerName = findBalanceProvider(provider)!.name
 
-  const load = useCallback(async (forceRefresh: boolean, signal: AbortSignal) => {
+  const load = useCallback(async (forceRefresh: boolean) => {
+    active.current?.abort()
+    const controller = new AbortController()
+    active.current = controller
+    const { signal } = controller
     setLoading(true)
     try {
-      setResult(await loadBalance(forceRefresh, signal))
-    } catch (error) {
-      if (signal.aborted) return
-      setResult({
-        ok: false,
-        code: 'UPSTREAM_UNAVAILABLE',
-        message: error instanceof Error ? error.message : '',
-      })
+      const value = await loadBalance(forceRefresh, signal, provider)
+      if (!signal.aborted) setResult(value)
+    } catch {
+      if (!signal.aborted) setResult({ ok: false, code: 'UPSTREAM_UNAVAILABLE', message: '' })
     } finally {
       if (!signal.aborted) setLoading(false)
     }
-  }, [loadBalance])
+  }, [loadBalance, provider])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void load(false, controller.signal)
-    return () => { controller.abort() }
+    setResult(undefined)
+    void load(false)
+    return () => { active.current?.abort() }
   }, [load])
 
-  const refresh = () => {
-    const controller = new AbortController()
-    void load(true, controller.signal)
-  }
-
   return (
-    <section className="dsh-balance-section" aria-labelledby="dsh-balance-title">
+    <section className="dsh-balance-section" aria-labelledby="dsh-balance-title" aria-busy={loading} data-provider={provider}>
       <div className="dsh-balance-summary">
         <div>
-          <h2 id="dsh-balance-title" className="dsh-balance-heading">{t('balance.title')}</h2>
-          <p className="dsh-balance-copy">{t('balance.copy')}</p>
+          <p className="dsh-ledger-kicker">01 / {t('panel.account')}</p>
+          <h2 id="dsh-balance-title" className="dsh-balance-heading">{t('balance.title', { provider: providerName })}</h2>
         </div>
-        <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={refresh}>
-          {loading ? t('action.loading') : t('balance.refresh')}
+        <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={() => { void load(true) }}>
+          <span aria-hidden="true">↻</span> {loading ? t('action.loading') : t('balance.refresh')}
         </button>
       </div>
-
-      {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('balance.loading')}</p> : null}
-      {result?.ok === false ? <p className="dsh-balance-error" role="alert">{t(errorLocaleKey(result.code))}</p> : null}
+      {loading && result === undefined ? <div className="dsh-balance-skeleton" role="status"><span>{t('balance.loading')}</span><i /><i /></div> : null}
+      {result?.ok === false ? (
+        <div className="dsh-balance-error" role="alert">
+          <strong>{providerName} / {t(errorLocaleKey(result.code))}</strong>
+          {result.code === 'MISSING_API_KEY' ? <p>{t(provider === 'deepseek' ? 'balance.setupDeepSeek' : 'balance.setup', { provider: providerName, ref: findBalanceProvider(provider)!.apiKeyRef })}</p> : null}
+        </div>
+      ) : null}
       {result?.ok === true ? (
         <>
           <div className="dsh-balance-availability" data-available={String(result.isAvailable)}>
             <span className="dsh-balance-dot" aria-hidden="true" />
-            <span>{t(result.isAvailable ? 'balance.available' : 'balance.unavailable')}</span>
+            <span>{result.accountType !== undefined ? t(`balance.${result.accountType}`) : t(result.isAvailable ? 'balance.available' : 'balance.unavailable')}</span>
           </div>
           {result.balanceInfos.length > 0
             ? <div className="dsh-balance-grid">{result.balanceInfos.map(info => <BalanceCard key={info.currency} info={info} t={t} />)}</div>
             : <p className="dsh-balance-status">{t('balance.empty')}</p>}
-          <p className="dsh-balance-meta">
+          {result.accountType !== undefined ? <p className="dsh-balance-copy">{t('balance.totalsNote')}</p> : null}
+          <div className="dsh-balance-footer"><p className="dsh-balance-meta">
             {t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}
-          </p>
+          </p><span>{t('panel.private')}</span></div>
         </>
       ) : null}
     </section>

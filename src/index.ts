@@ -4,10 +4,11 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import z from '@deepseek-ai/schemastery'
-import { BalanceQueryError, queryDeepSeekBalance } from './balance.ts'
+import { BalanceQueryError, queryProviderBalance } from './balance.ts'
 import { aggregateBilling, assertTimeZone, normalizeUsdToCny, USAGE_ROUTE } from './billing.ts'
 import { ModelQueryError, queryDeepSeekModels } from './models.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
+import { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
 import type {
   BalanceApiResponse,
   BalanceSuccess,
@@ -25,7 +26,14 @@ import type {
 export const name = 'dsh-balance'
 export const inject = ['webServer', 'credentials', 'sessionPersistence']
 
+export interface ProviderConfig {
+  id: string
+  apiKeyRef?: string
+  baseUrl?: string
+}
+
 export interface Config {
+  providers?: ProviderConfig[]
   apiKeyRef: string
   baseUrl: string
   timeoutMs: number
@@ -35,6 +43,11 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
+  providers: z.array(z.object({
+    id: z.string().required(),
+    apiKeyRef: z.string().role('credential-ref').required(false),
+    baseUrl: z.string().required(false),
+  })).required(false),
   apiKeyRef: z.string().role('credential-ref').default('DEEPSEEK_API_KEY'),
   baseUrl: z.string().default('https://api.deepseek.com'),
   timeoutMs: z.number().step(1).min(1).max(60_000).default(10_000),
@@ -45,7 +58,7 @@ export const Config: z<Config> = z.object({
 
 function validateBaseUrl(value: string): void {
   const url = new URL(value)
-  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
+  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
     throw new Error('dsh-balance: baseUrl must use HTTPS (HTTP is accepted only for a loopback test server)')
   }
@@ -137,7 +150,29 @@ async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number
 export function apply(ctx: Context, config: Config): void {
   validateBaseUrl(config.baseUrl)
   const ref = credentialRef(config.apiKeyRef)
-  let cached: { expiresAt: number; value: BalanceSuccess } | undefined
+  const providerConfigs = new Map<string, { apiKeyRef: string; baseUrl: string }>(
+    BALANCE_PROVIDERS.map(provider => [provider.id, {
+      apiKeyRef: provider.id === 'deepseek' ? config.apiKeyRef : provider.apiKeyRef,
+      baseUrl: provider.id === 'deepseek' ? config.baseUrl : provider.baseUrl,
+    }]),
+  )
+  const configured = new Set<string>()
+  for (const override of config.providers ?? []) {
+    const provider = findBalanceProvider(override.id)
+    if (provider === undefined || configured.has(provider.id)) {
+      throw new Error('dsh-balance: unsupported or duplicate balance provider')
+    }
+    configured.add(provider.id)
+    const defaults = providerConfigs.get(provider.id)!
+    const entry = {
+      apiKeyRef: override.apiKeyRef ?? defaults.apiKeyRef,
+      baseUrl: override.baseUrl ?? defaults.baseUrl,
+    }
+    validateBaseUrl(entry.baseUrl)
+    credentialRef(entry.apiKeyRef)
+    providerConfigs.set(provider.id, entry)
+  }
+  const balanceCache = new Map<string, { expiresAt: number; value: BalanceSuccess }>()
   let cachedModels: { expiresAt: number; value: ModelsSuccess } | undefined
   let cachedUsage: { key: string; expiresAt: number; value: UsageAllSuccess | UsageSessionSuccess } | undefined
 
@@ -153,42 +188,48 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     const requestUrl = new URL(req.url ?? BALANCE_ROUTE, 'http://localhost')
+    const provider = findBalanceProvider(requestUrl.searchParams.get('provider') ?? 'deepseek')
+    if (provider === undefined) {
+      sendJson(res, 400, { ok: false, code: 'UNSUPPORTED_PROVIDER', message: '不支持此提供方的余额查询' })
+      return
+    }
+    const settings = providerConfigs.get(provider.id)!
     const forceRefresh = requestUrl.searchParams.get('refresh') === '1'
+    const cached = balanceCache.get(provider.id)
     if (!forceRefresh && cached !== undefined && cached.expiresAt > Date.now()) {
       sendJson(res, 200, { ...cached.value, source: 'cache' })
       return
     }
 
-    const credential = await ctx.credentials.resolve(ref)
-    if (credential === undefined) {
-      sendJson(res, 401, {
-        ok: false,
-        code: 'MISSING_API_KEY',
-        message: `未配置 ${config.apiKeyRef}，请先在“模型”设置中保存 DeepSeek API 密钥`,
-      })
-      return
-    }
-
     try {
-      const result = await queryDeepSeekBalance({
+      const credential = await ctx.credentials.resolve(credentialRef(settings.apiKeyRef))
+      if (credential === undefined) {
+        sendJson(res, 401, {
+          ok: false,
+          code: 'MISSING_API_KEY',
+          message: `未配置 ${settings.apiKeyRef}，请先在“模型”设置中保存 ${provider.name} API 密钥`,
+        })
+        return
+      }
+      const result = await queryProviderBalance(provider.id, {
         apiKey: credential.value,
-        baseUrl: config.baseUrl,
+        baseUrl: settings.baseUrl,
         timeoutMs: config.timeoutMs,
       })
       const value: BalanceSuccess = {
         ok: true,
-        isAvailable: result.isAvailable,
-        balanceInfos: result.balanceInfos,
+        ...result,
+        provider: provider.id,
         fetchedAt: new Date().toISOString(),
         source: 'live',
       }
-      cached = { expiresAt: Date.now() + config.cacheMs, value }
+      balanceCache.set(provider.id, { expiresAt: Date.now() + config.cacheMs, value })
       sendJson(res, 200, value)
     } catch (error) {
       const failure = error instanceof BalanceQueryError
         ? error
-        : new BalanceQueryError('UPSTREAM_ERROR', '查询余额时发生未知错误', 502, { cause: error })
-      ctx.logger.warn(failure)
+        : new BalanceQueryError('UPSTREAM_ERROR', '查询余额时发生未知错误', 502)
+      ctx.logger.warn(`Balance query failed: ${provider.id} ${failure.code}`)
       sendJson(res, failure.httpStatus, { ok: false, code: failure.code, message: failure.message })
     }
   }
@@ -349,7 +390,9 @@ export function apply(ctx: Context, config: Config): void {
   )
 }
 
-export { BalanceQueryError, parseDeepSeekBalance, queryDeepSeekBalance } from './balance.ts'
+export { BalanceQueryError, parseDeepSeekBalance, parseStepFunBalance, queryDeepSeekBalance, queryStepFunBalance, queryProviderBalance } from './balance.ts'
+export { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
+export type { BalanceProviderId } from './providers.ts'
 export { ModelQueryError, parseDeepSeekModels, queryDeepSeekModels } from './models.ts'
 export {
   aggregateBilling,
@@ -363,6 +406,8 @@ export {
   USAGE_ROUTE,
 } from './billing.ts'
 export type {
+  ApiErrorCode,
+  BalancePayload,
   BalanceApiResponse,
   BalanceFailure,
   BalanceInfo,

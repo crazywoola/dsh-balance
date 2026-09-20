@@ -4,24 +4,33 @@ export const BALANCE_ROUTE = '/dsh-balance/api/balance'
 /** The same-origin endpoint that proxies DeepSeek's `/models` API. */
 export const MODELS_ROUTE = '/dsh-balance/api/models'
 
-/** One currency row returned by DeepSeek's `/user/balance` API. */
+/** Normalized monetary values; provider totals are not remaining balance components. */
 export interface BalanceInfo {
   currency: string
   totalBalance: string
-  grantedBalance: string
-  toppedUpBalance: string
+  grantedBalance?: string
+  toppedUpBalance?: string
+  totalCashBalance?: string
+  totalVoucherBalance?: string
+}
+
+export interface BalancePayload {
+  /** null when the provider does not report service availability. */
+  isAvailable: boolean | null
+  accountType?: 'prepaid' | 'postpaid'
+  balanceInfos: BalanceInfo[]
 }
 
 /** A successful, browser-safe balance response. */
-export interface BalanceSuccess {
+export interface BalanceSuccess extends BalancePayload {
   ok: true
-  isAvailable: boolean
-  balanceInfos: BalanceInfo[]
+  provider?: string
   fetchedAt: string
   source: 'live' | 'cache'
 }
 
-export type DeepSeekApiErrorCode =
+export type ApiErrorCode =
+  | 'UNSUPPORTED_PROVIDER'
   | 'FORBIDDEN'
   | 'INVALID_API_KEY'
   | 'INVALID_RESPONSE'
@@ -32,13 +41,14 @@ export type DeepSeekApiErrorCode =
   | 'UPSTREAM_TIMEOUT'
   | 'UPSTREAM_UNAVAILABLE'
 
-/** @deprecated Prefer the feature-neutral `DeepSeekApiErrorCode`. */
-export type BalanceErrorCode = DeepSeekApiErrorCode
+/** @deprecated Prefer `ApiErrorCode`. */
+export type DeepSeekApiErrorCode = ApiErrorCode
+export type BalanceErrorCode = ApiErrorCode
 
 /** A failed, browser-safe response. It intentionally contains no upstream body or credential. */
 export interface BalanceFailure {
   ok: false
-  code: DeepSeekApiErrorCode
+  code: ApiErrorCode
   message: string
 }
 

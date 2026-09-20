@@ -3,6 +3,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { BalanceApiResponse, ModelsApiResponse } from '../types.ts'
+import type { BalanceProviderId } from '../providers.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from '../types.ts'
 import { USAGE_ROUTE } from '../billing.ts'
 import type { UsageApiResponse } from '../billing.ts'
@@ -23,8 +24,10 @@ export type { UsageLoadOptions, UsageTabInjected, BillingOverviewProps, BillingV
 
 export const inject = ['slots', 'locale']
 
-async function loadBalance(forceRefresh: boolean, signal: AbortSignal): Promise<BalanceApiResponse> {
-  const url = forceRefresh ? `${BALANCE_ROUTE}?refresh=1` : BALANCE_ROUTE
+async function loadBalance(forceRefresh: boolean, signal: AbortSignal, provider: BalanceProviderId = 'deepseek'): Promise<BalanceApiResponse> {
+  const params = new URLSearchParams({ provider })
+  if (forceRefresh) params.set('refresh', '1')
+  const url = `${BALANCE_ROUTE}?${params}`
   const response = await fetch(url, {
     method: 'GET',
     headers: { accept: 'application/json' },

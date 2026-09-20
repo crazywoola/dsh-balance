@@ -2,16 +2,18 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-A DeepSeek Harness plugin for checking API balances, available models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
+A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, available DeepSeek models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
 
-![DeepSeek balance settings panel](./docs/dsh-balance-settings-v040.png)
+The redesigned account ledger switches between DeepSeek and StepFun. Run `pnpm preview` to explore it with sample data.
 
 ![DeepSeek balance below the chat composer](./docs/dsh-balance-composer-v040.png)
 
 ## Features
 
-- View total, topped-up, and granted balances
-- Keep a compact balance summary below the chat composer
+- DeepSeek: total, topped-up, and granted balances
+- StepFun: available balance, total cash credited, total vouchers granted, and prepaid / postpaid account type
+- Independent provider caches and case-insensitive Provider IDs
+- Keep a compact DeepSeek balance summary below the chat composer
 - View models available to the current API key
 - View actual usage costs by model, session, and day in Settings, plus request details in the current session's Usage tab
 - Mark missing usage, unknown providers, and unknown models as unpriced without estimating tokens
@@ -29,7 +31,7 @@ dsh plugin --profile web add @pinkbanana/dsh-balance@latest
 dsh --profile web
 ```
 
-Open <http://127.0.0.1:3080/> and go to Settings → DeepSeek Balance. The panel sits directly below Agent presets, and the balance summary also appears below the composer in existing sessions. Save the API key in Settings → Models or provide it through the `DEEPSEEK_API_KEY` environment variable.
+Open <http://127.0.0.1:3080/> and go to Settings → Model Balances. The panel sits directly below Agent presets, and the balance summary also appears below the composer in existing sessions. Save the API key in Settings → Models or provide it through the `DEEPSEEK_API_KEY` environment variable.
 
 Usage statistics read saved sessions and prefer the current live session. Prompt content is never exposed. To show a fixed-rate CNY conversion, add for example:
 
@@ -37,12 +39,38 @@ Usage statistics read saved sessions and prefer the current live session. Prompt
 usdToCny: 7.2
 ```
 
+## StepFun setup
+
+Add a custom provider in Settings → Models with Provider ID `StepFun` (`stepfun`, `STEPFUN`, and other case variants work) and save its API key. Harness derives the credential reference `STEPFUN_API_KEY`; setting that environment variable also works. Select StepFun in Settings → Model Balances.
+
+The [StepFun account API](https://platform.stepfun.com/docs/zh/api-reference/accounts/get) uses Bearer authentication at `GET https://api.stepfun.com/v1/accounts`. Amounts are shown in CNY. Cash and voucher totals are cumulative amounts as documented, not remaining balance components. The API does not report service availability, so a zero or negative postpaid balance is not labeled as unavailable service.
+
+To use another credential reference, override the balance provider in this plugin's configuration (`baseUrl` is an API prefix; include `/v1` for StepFun):
+
+```yaml
+providers:
+  - id: StepFun
+    apiKeyRef: MY_STEPFUN_KEY
+    baseUrl: https://api.stepfun.com/v1
+```
+
+Existing top-level `apiKeyRef` / `baseUrl` settings continue to serve DeepSeek. The `providers` entries override balance queries only. Custom model base URLs are not read automatically; balance queries default to official APIs. The model directory and composer summary remain DeepSeek-specific. Usage pricing coverage is unchanged; unsupported StepFun prices remain unpriced.
+
+## Extension and design
+
+- `src/providers.ts` holds shared provider metadata. The adapter table in `src/balance.ts` defines endpoints and response parsers; transport, errors, and caching are shared.
+- `GET /dsh-balance/api/balance?provider=StepFun` selects StepFun. Omitting provider preserves DeepSeek compatibility; `refresh=1` bypasses that provider's cache. Unknown providers return `UNSUPPORTED_PROVIDER`.
+- The layout draws on [Codrops' Kononenko case study](https://tympanus.net/codrops/2026/09/18/kononenko-architectural-bureau/): oversized type, negative space, architectural grids, and geometric linework, implemented in original CSS with light/dark themes, narrow layouts, and reduced-motion support.
+
 ## Development
 
 ```bash
 pnpm install
 pnpm check
+pnpm preview
 ```
+
+The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The StepFun integration and redesign on main have not been published to npm; the `@latest` installation command above still installs the published version.
 
 ## License
 

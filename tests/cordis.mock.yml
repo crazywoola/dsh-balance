@@ -5,3 +5,7 @@
     timeoutMs: 5000
     cacheMs: 30000
     allowRemote: false
+    providers:
+      - id: StepFun
+        apiKeyRef: STEPFUN_API_KEY
+        baseUrl: http://127.0.0.1:3091/v1

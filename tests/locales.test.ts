@@ -11,6 +11,7 @@ describe('client locales', () => {
 
   it('maps every API error code to a translated key', () => {
     const codes: DeepSeekApiErrorCode[] = [
+      'UNSUPPORTED_PROVIDER',
       'FORBIDDEN',
       'INVALID_API_KEY',
       'INVALID_RESPONSE',

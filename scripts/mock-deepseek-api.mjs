@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 
 const port = Number.parseInt(process.env.DSH_BALANCE_MOCK_PORT ?? '3091', 10)
 const server = createServer((req, res) => {
-  if (req.method !== 'GET' || (req.url !== '/user/balance' && req.url !== '/models')) {
+  if (req.method !== 'GET' || !['/user/balance', '/models', '/v1/accounts'].includes(req.url)) {
     res.writeHead(404)
     res.end()
     return
@@ -10,6 +10,12 @@ const server = createServer((req, res) => {
   if (req.headers.authorization !== 'Bearer dsh-balance-test-key') {
     res.writeHead(401, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ error: { message: 'invalid test key' } }))
+    return
+  }
+
+  if (req.url === '/v1/accounts') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ object: 'account', type: 'prepaid', balance: 256.8, total_cash_balance: 500, total_voucher_balance: 26 }))
     return
   }
 
@@ -36,7 +42,7 @@ const server = createServer((req, res) => {
 })
 
 server.listen(port, '127.0.0.1', () => {
-  process.stdout.write(`mock DeepSeek API listening at http://127.0.0.1:${port}\n`)
+  process.stdout.write(`mock balance APIs listening at http://127.0.0.1:${port}\n`)
 })
 
 const shutdown = () => { server.close(() => process.exit(0)) }
