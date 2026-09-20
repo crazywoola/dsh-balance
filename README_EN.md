@@ -2,7 +2,7 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, available DeepSeek models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
+A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, available provider models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
 
 The redesigned account ledger switches between DeepSeek and StepFun. Run `pnpm preview` to explore it with sample data.
 
@@ -14,7 +14,7 @@ The redesigned account ledger switches between DeepSeek and StepFun. Run `pnpm p
 - StepFun: available balance, total cash credited, total vouchers granted, and prepaid / postpaid account type
 - Independent provider caches and case-insensitive Provider IDs
 - Keep a compact DeepSeek balance summary below the chat composer
-- View models available to the current API key
+- Fetch available models, owners, and creation dates from the selected provider’s `/models` API
 - View actual usage costs by model, session, and day in Settings, plus request details in the current session's Usage tab
 - Mark missing usage, unknown providers, and unknown models as unpriced without estimating tokens
 - Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time
@@ -54,7 +54,9 @@ providers:
     baseUrl: https://api.stepfun.com/v1
 ```
 
-Existing top-level `apiKeyRef` / `baseUrl` settings continue to serve DeepSeek. The `providers` entries override balance queries only. Custom model base URLs are not read automatically; balance queries default to official APIs. The model directory and composer summary remain DeepSeek-specific. Usage pricing coverage is unchanged; unsupported StepFun prices remain unpriced.
+Existing top-level `apiKeyRef` / `baseUrl` settings continue to serve DeepSeek. The `providers` entries override both balance and model queries. Custom model base URLs are not read automatically; balance queries default to official APIs. Available models follow the selected provider; the composer summary remains DeepSeek-specific. Usage pricing coverage is unchanged; unsupported StepFun prices remain unpriced.
+
+Model lists use the [StepFun list API](https://platform.stepfun.com/docs/zh/api-reference/models/list) at `GET /v1/models`, parsing `id`, `owned_by`, and `created` (Unix seconds) from each [Model object](https://platform.stepfun.com/docs/zh/api-reference/models/object). These fields are already returned in the list, so individual model retrieval is unnecessary. The Host route is `GET /dsh-balance/api/models?provider=StepFun`, with isolated provider caches and `refresh=1` to force a refresh.
 
 ## Extension and design
 

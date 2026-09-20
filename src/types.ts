@@ -1,7 +1,7 @@
 /** The same-origin endpoint exposed by the plugin's Host half. */
 export const BALANCE_ROUTE = '/dsh-balance/api/balance'
 
-/** The same-origin endpoint that proxies DeepSeek's `/models` API. */
+/** The same-origin endpoint that proxies the selected provider’s `/models` API. */
 export const MODELS_ROUTE = '/dsh-balance/api/models'
 
 /** Normalized monetary values; provider totals are not remaining balance components. */
@@ -54,15 +54,18 @@ export interface BalanceFailure {
 
 export type BalanceApiResponse = BalanceSuccess | BalanceFailure
 
-/** One model returned by DeepSeek's `/models` API. */
+/** One model returned by a provider’s `/models` API. */
 export interface ModelInfo {
   id: string
   ownedBy: string
+  /** Unix timestamp in seconds, when supplied by the provider. */
+  created?: number
 }
 
 /** A successful, browser-safe model-list response. */
 export interface ModelsSuccess {
   ok: true
+  provider?: string
   models: ModelInfo[]
   fetchedAt: string
   source: 'live' | 'cache'

@@ -7,7 +7,7 @@ import type { Config } from '../src/index.ts'
 const deepseek = { is_available: true, balance_infos: [{ currency: 'CNY', total_balance: '110', granted_balance: '10', topped_up_balance: '100' }] }
 const stepfun = { object: 'account', type: 'postpaid', balance: 0, total_cash_balance: 25, total_voucher_balance: 26 }
 
-function setup(overrides: Partial<Config> = {}) {
+function setup(overrides: Partial<Config> = {}, route = '/dsh-balance/api/balance') {
   const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>()
   const resolve = vi.fn(async (ref: string) => ({ value: `${ref}-secret`, source: 'test' }))
   const warn = vi.fn()
@@ -22,7 +22,7 @@ function setup(overrides: Partial<Config> = {}) {
     request: async (query = '', method = 'GET', host = 'localhost') => {
       let status = 0
       let body = ''
-      await routes.get('/dsh-balance/api/balance')!({ method, url: `/dsh-balance/api/balance${query}`, headers: { host } } as IncomingMessage, {
+      await routes.get(route)!({ method, url: `${route}${query}`, headers: { host } } as IncomingMessage, {
         setHeader: vi.fn(),
         writeHead: (value: number) => { status = value },
         end: (value: string) => { body = value },
@@ -87,5 +87,47 @@ describe('provider balance route', () => {
     expect(() => setup({ providers: [{ id: 'stepfun', baseUrl: 'http://example.com/v1' }] })).toThrow('HTTPS')
     expect(() => setup({ providers: [{ id: 'StepFun' }, { id: 'STEPFUN' }] })).toThrow('duplicate')
     expect(() => setup({ providers: [{ id: 'unknown' }] })).toThrow('unsupported')
+  })
+})
+
+describe('provider models route', () => {
+  it('uses separate credentials and caches for each provider and supports refresh', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn(async (url: URL) => Response.json({ object: 'list', data: [{ object: 'model', id: url.hostname === 'api.stepfun.com' ? 'step-3.5-flash' : 'deepseek-v4-flash', owned_by: url.hostname }] }))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({}, '/dsh-balance/api/models')
+    expect((await request()).body).toMatchObject({ provider: 'deepseek', source: 'live', models: [{ id: 'deepseek-v4-flash' }] })
+    expect((await request('?provider=StepFun')).body).toMatchObject({ provider: 'stepfun', source: 'live', models: [{ id: 'step-3.5-flash' }] })
+    expect(resolve.mock.calls.map(([ref]) => ref)).toEqual(['DEEPSEEK_API_KEY', 'STEPFUN_API_KEY'])
+    expect((await request('?provider=STEPFUN')).body).toMatchObject({ source: 'cache', models: [{ id: 'step-3.5-flash' }] })
+    expect((await request()).body).toMatchObject({ source: 'cache', models: [{ id: 'deepseek-v4-flash' }] })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect((await request('?provider=stepfun&refresh=1')).body.source).toBe('live')
+    vi.advanceTimersByTime(30_001)
+    expect((await request('?provider=stepfun')).body.source).toBe('live')
+    expect(fetchImpl).toHaveBeenCalledTimes(4)
+  })
+
+  it('honors provider overrides and rejects bad requests before reading credentials', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({ object: 'list', data: [] }))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({ providers: [{ id: 'StepFun', apiKeyRef: 'STEP_CUSTOM', baseUrl: 'http://localhost:3091/v1/' }] }, '/dsh-balance/api/models')
+    expect((await request('?provider=other')).status).toBe(400)
+    expect((await request('', 'POST')).status).toBe(405)
+    expect((await request('', 'GET', 'example.com')).status).toBe(403)
+    expect(resolve).not.toHaveBeenCalled()
+    expect((await request('?provider=StepFun')).status).toBe(200)
+    expect(resolve).toHaveBeenCalledWith('STEP_CUSTOM')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('http://localhost:3091/v1/models')
+  })
+
+  it('handles missing and failing credentials without exposing secrets or using another provider', async () => {
+    const { request, resolve, warn } = setup({}, '/dsh-balance/api/models')
+    resolve.mockResolvedValueOnce(undefined as never)
+    expect(await request('?provider=stepfun')).toMatchObject({ status: 401, body: { code: 'MISSING_API_KEY' } })
+    resolve.mockRejectedValueOnce(new Error('private-secret'))
+    const result = await request('?provider=stepfun')
+    expect(result).toMatchObject({ status: 502, body: { code: 'UPSTREAM_ERROR' } })
+    expect(JSON.stringify([result, warn.mock.calls])).not.toContain('private-secret')
   })
 })

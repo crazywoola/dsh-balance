@@ -2,7 +2,7 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、DeepSeek 可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
+DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供方的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
 设置页采用账户总览布局，支持 DeepSeek / StepFun 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
 
@@ -14,7 +14,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、DeepSeek 
 - StepFun：查看可用余额、总充值金额、总赠送金额及预付费 / 后付费账户类型
 - 提供方独立缓存；支持大小写不敏感的 Provider ID
 - 在聊天框下方持续显示 DeepSeek 余额摘要
-- 查看当前 API Key 可用的模型
+- 从当前提供方的 `/models` 接口读取可用模型、所属组织与创建时间
 - 在设置页按模型、会话和日期查看实际 usage 消费，并在当前会话的“消费”Tab 查看请求明细
 - 缺少 provider usage、未知 provider 或未知模型时标记为“未计费”，不进行 token 估算
 - 日期按浏览器 IANA 时区分组；DeepSeek 峰谷价格始终按北京时间计算
@@ -54,7 +54,9 @@ providers:
     baseUrl: https://api.stepfun.com/v1
 ```
 
-已有的顶层 `apiKeyRef` / `baseUrl` 继续用于 DeepSeek；`providers` 仅覆盖对应提供方的余额查询。配置不读取自定义模型的 Base URL，默认查询官方 API。模型目录和聊天框摘要仍属于 DeepSeek；消费统计保持原有定价覆盖，未支持的 StepFun 价格会标为未计费。
+已有的顶层 `apiKeyRef` / `baseUrl` 继续用于 DeepSeek；`providers` 覆盖对应提供方的余额与模型查询。配置不读取自定义模型的 Base URL，默认查询官方 API。可用模型随所选提供方切换，聊天框摘要仍属于 DeepSeek；消费统计保持原有定价覆盖，未支持的 StepFun 价格会标为未计费。
+
+模型列表按 [StepFun 列表 API](https://platform.stepfun.com/docs/zh/api-reference/models/list) 请求 `GET /v1/models`，解析 [Model 对象](https://platform.stepfun.com/docs/zh/api-reference/models/object) 的 `id`、`owned_by`、`created`（秒级 Unix 时间戳）。列表已包含这些信息，不需要逐个调用单模型详情接口。Host 路由为 `GET /dsh-balance/api/models?provider=StepFun`，模型缓存按 provider 隔离，`refresh=1` 强制刷新。
 
 ## 扩展与设计
 

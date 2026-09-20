@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 
 const port = Number.parseInt(process.env.DSH_BALANCE_MOCK_PORT ?? '3091', 10)
 const server = createServer((req, res) => {
-  if (req.method !== 'GET' || !['/user/balance', '/models', '/v1/accounts'].includes(req.url)) {
+  if (req.method !== 'GET' || !['/user/balance', '/models', '/v1/models', '/v1/accounts'].includes(req.url)) {
     res.writeHead(404)
     res.end()
     return
@@ -16,6 +16,12 @@ const server = createServer((req, res) => {
   if (req.url === '/v1/accounts') {
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ object: 'account', type: 'prepaid', balance: 256.8, total_cash_balance: 500, total_voucher_balance: 26 }))
+    return
+  }
+
+  if (req.url === '/v1/models') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ object: 'list', data: [{ id: 'step-3.5-flash', object: 'model', created: 1713974400, owned_by: 'stepai' }] }))
     return
   }
 

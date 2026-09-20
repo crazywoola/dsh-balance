@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { BALANCE_PROVIDERS } from '../providers.ts'
+import { BALANCE_PROVIDERS, findBalanceProvider } from '../providers.ts'
 import type { BalanceProviderId } from '../providers.ts'
 import { BalanceSection } from './BalanceTab.tsx'
 import type { BalanceTabInjected } from './BalanceTab.tsx'
@@ -36,9 +36,9 @@ export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSee
           </button>
         ))}
       </div>
-      <BalanceSection key={provider} provider={provider} loadBalance={loadBalance} t={t} />
-      <div className="dsh-ledger-section-label"><span>02 / {t('panel.models')}</span><span>DeepSeek</span></div>
-      <ModelsSection loadModels={loadModels} t={t} />
+      <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
+      <div className="dsh-ledger-section-label"><span>02 / {t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
+      <ModelsSection key={`models-${provider}`} provider={provider} loadModels={loadModels} t={t} />
       <div className="dsh-ledger-section-label"><span>03 / {t('panel.activity')}</span><span>{t('panel.allProviders')}</span></div>
       <BillingOverview loadUsage={loadUsage} t={t} />
     </div>

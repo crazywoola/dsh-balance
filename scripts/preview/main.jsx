@@ -29,6 +29,12 @@ const loadBalance = async (refresh, signal, provider = 'deepseek') => {
       : [{ currency: 'CNY', totalBalance: '128.50', toppedUpBalance: '120', grantedBalance: '8.50' }, { currency: 'USD', totalBalance: '18.25', toppedUpBalance: '17', grantedBalance: '1.25' }],
   }
 }
-const loadModels = async () => ({ ok: true, fetchedAt, source: 'live', models: [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }, { id: 'deepseek-v4-pro', ownedBy: 'deepseek' }] })
+const loadModels = async (refresh, signal, provider = 'deepseek') => {
+  await new Promise(resolve => setTimeout(resolve, provider === 'stepfun' ? 500 : 200))
+  signal.throwIfAborted()
+  return { ok: true, provider, fetchedAt, source: refresh ? 'live' : 'cache', models: provider === 'stepfun'
+    ? [{ id: 'step-3.5-flash', ownedBy: 'stepai', created: 1713974400 }, { id: 'step-3.7-flash', ownedBy: 'stepai', created: 1713196800 }]
+    : [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }, { id: 'deepseek-v4-pro', ownedBy: 'deepseek' }] }
+}
 const loadUsage = async () => ({ ok: true, scope: 'all', fetchedAt, source: 'live', ...aggregateBilling([], { timeZone: 'Asia/Shanghai' }) })
 createRoot(document.getElementById('root')).render(<DeepSeekPanel t={t} loadBalance={loadBalance} loadModels={loadModels} loadUsage={loadUsage} />)

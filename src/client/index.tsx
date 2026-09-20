@@ -41,8 +41,10 @@ async function loadBalance(forceRefresh: boolean, signal: AbortSignal, provider:
   return value as BalanceApiResponse
 }
 
-async function loadModels(forceRefresh: boolean, signal: AbortSignal): Promise<ModelsApiResponse> {
-  const url = forceRefresh ? `${MODELS_ROUTE}?refresh=1` : MODELS_ROUTE
+async function loadModels(forceRefresh: boolean, signal: AbortSignal, provider: BalanceProviderId = 'deepseek'): Promise<ModelsApiResponse> {
+  const params = new URLSearchParams({ provider })
+  if (forceRefresh) params.set('refresh', '1')
+  const url = `${MODELS_ROUTE}?${params}`
   const response = await fetch(url, {
     method: 'GET',
     headers: { accept: 'application/json' },
