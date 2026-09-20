@@ -24,7 +24,7 @@ export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSee
       <header className="dsh-ledger-header">
         <div className="dsh-ledger-eyebrow"><span>DSH / {t('panel.ledger')}</span><span>{t('panel.private')}</span></div>
         <div className="dsh-ledger-intro">
-          <div><h1>{t('panel.title')}<span className="dsh-ledger-period">.</span></h1><p>{t('panel.copy')}</p></div>
+          <div><h1>{t('panel.title')}</h1><p>{t('panel.copy')}</p></div>
           <div className="dsh-ledger-orbit" aria-hidden="true"><i /><i /><i /><span>↗</span></div>
         </div>
       </header>

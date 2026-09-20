@@ -23,8 +23,7 @@ export const balanceStyles = `
 }
 .dsh-ledger-eyebrow, .dsh-ledger-section-label { display: flex; justify-content: space-between; gap: 16px; }
 .dsh-ledger-intro { display: grid; grid-template-columns: 1fr 150px; align-items: center; gap: 24px; padding: 32px 0 20px; }
-.dsh-ledger-intro h1 { max-width: 650px; margin: 0; font-size: clamp(32px, 5cqi, 60px); font-weight: 550; line-height: 1.15; letter-spacing: -.055em; text-wrap: balance; }
-.dsh-ledger-period { color: #78932f; }
+.dsh-ledger-intro h1 { max-width: 650px; margin: 0; font-size: 24px; font-weight: 500; line-height: 1.4; }
 .dsh-ledger-intro p { margin: 18px 0 0; color: var(--ledger-muted); font-size: 13px; line-height: 1.7; }
 .dsh-ledger-orbit { position: relative; display: grid; place-items: center; width: 148px; height: 148px; }
 .dsh-ledger-orbit i { position: absolute; width: 112px; height: 112px; border: 1px solid var(--ledger-muted); border-radius: 50%; transform: rotate(-35deg) scaleX(.5); }
