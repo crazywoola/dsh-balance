@@ -72,7 +72,7 @@ pnpm check
 pnpm preview
 ```
 
-The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The StepFun integration and redesign on main have not been published to npm; the `@latest` installation command above still installs the published version.
+The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. StepFun balance and model queries and the redesigned account page are available starting with `0.6.0`.
 
 ## License
 

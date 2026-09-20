@@ -1,7 +1,7 @@
 {
   "name": "@pinkbanana/dsh-balance",
-  "version": "0.5.0",
-  "description": "DeepSeek Harness plugin for API balances, models, and multidimensional usage billing",
+  "version": "0.6.0",
+  "description": "DeepSeek Harness plugin for multi-provider API balances, available models, and usage billing",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/crazywoola/dsh-balance.git"
@@ -12,6 +12,7 @@
   },
   "keywords": [
     "deepseek",
+    "stepfun",
     "deepseek-harness",
     "dsh-plugin",
     "dsh-plugins",

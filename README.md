@@ -72,7 +72,7 @@ pnpm check
 pnpm preview
 ```
 
-预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。当前 main 中的 StepFun 接入和页面改版尚未发布 npm；上面的 `@latest` 安装命令仍使用已发布版本。
+预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。
 
 ## License
 
