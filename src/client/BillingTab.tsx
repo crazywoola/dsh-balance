@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   UsageApiResponse,
@@ -7,10 +7,12 @@ import type {
   UsageSummary,
   UsageTotals,
 } from '../billing.ts'
+import { findBalanceProvider } from '../providers.ts'
 import { displayAmount } from './format.ts'
 import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
 
 export interface UsageLoadOptions {
+  provider?: string
   scope: 'all' | 'session'
   sessionId?: string
   timeZone: string
@@ -23,7 +25,7 @@ export interface UsageTabInjected {
   loadUsage: (options: UsageLoadOptions, signal: AbortSignal) => Promise<UsageApiResponse>
 }
 
-export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_NS>
+export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: string }
 export type BillingViewProps = PropsRuntime<'conversation.view'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
 function formatTokens(value: number): string {
@@ -46,10 +48,9 @@ function localDateKey(timeZone: string, date = new Date()): string {
 }
 
 function dateDaysAgo(timeZone: string, days: number): string {
-  const now = new Date()
-  const local = new Date(now.toLocaleString('en-US', { timeZone }))
-  local.setDate(local.getDate() - days)
-  return localDateKey(timeZone, local)
+  const local = new Date(`${localDateKey(timeZone)}T12:00:00Z`)
+  local.setUTCDate(local.getUTCDate() - days)
+  return local.toISOString().slice(0, 10)
 }
 
 function totalForDay(summary: UsageSummary, date: string): UsageTotals {
@@ -74,10 +75,12 @@ function ErrorMessage({ result, t }: { result: UsageApiResponse; t: BillingOverv
 
 function CostLabel({ totals, t }: { totals: UsageTotals; t: BillingOverviewProps['t'] }) {
   const locale = t('locale.tag')
+  const unpriced = totals.requests > 0 && totals.pricedRequests === 0
   return (
     <div className="dsh-billing-cost-value">
-      <strong>{amount(totals.costUsd, 'USD', locale)}</strong>
-      {totals.costCny !== null ? <span>{amount(totals.costCny, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
+      <strong>{unpriced ? t('billing.notPriced') : amount(totals.costUsd, 'USD', locale)}</strong>
+      {totals.unpricedRequests > 0 && !unpriced ? <small>{t('billing.partial')}</small> : null}
+      {totals.costCny !== null && !unpriced ? <span>{amount(totals.costCny, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
     </div>
   )
 }
@@ -98,7 +101,7 @@ function SummaryCards({ summary, t }: { summary: UsageSummary; t: BillingOvervie
       </article>
       <article className="dsh-billing-card">
         <span>{t('billing.tokens')}</span>
-        <strong>{formatTokens(summary.totals.inputTokens + summary.totals.outputTokens)}</strong>
+        <strong>{formatTokens(summary.totals.inputTokens + summary.totals.outputTokens + summary.totals.cacheReadTokens + summary.totals.cacheWriteTokens)}</strong>
         <TotalsCaption totals={summary.totals} t={t} />
         <small>{t('billing.requestCount', { count: summary.totals.requests })}</small>
       </article>
@@ -123,14 +126,14 @@ function TotalsCaption({ totals, t }: { totals: UsageTotals; t: BillingOverviewP
 function ModelRows({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
   return <div className="dsh-billing-list">
     {summary.byModel.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : summary.byModel.map(item => (
-      <article className="dsh-billing-list-row" key={`${item.provider}/${item.model}`}>
+      <article className="dsh-billing-list-row" key={JSON.stringify([item.provider, item.model])}>
         <div>
           <code>{item.provider}/{item.model}</code>
           <TotalsCaption totals={item} t={t} />
         </div>
         <div className="dsh-billing-list-value">
           <CostLabel totals={item} t={t} />
-          <small>{t('billing.requestCount', { count: item.requests })} · {t('billing.share', { percent: `${summary.totals.costUsd === 0 ? 0 : Math.round(item.costUsd / summary.totals.costUsd * 100)}%` })}</small>
+          <small>{t('billing.requestCount', { count: item.requests })}{item.pricedRequests > 0 && summary.totals.costUsd > 0 ? ` · ${t('billing.share', { percent: `${Math.round(item.costUsd / summary.totals.costUsd * 100)}%` })}` : ''}</small>
         </div>
       </article>
     ))}
@@ -194,7 +197,7 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
         <article className="dsh-billing-request-row" key={`${request.turn}:${request.step}:${request.time}`}>
           <div>
             <span>{new Date(request.time).toLocaleString(locale)}</span>
-            <code>{request.model ?? t('billing.unknownModel')}</code>
+            <code>{request.provider ?? '?'} / {request.model ?? t('billing.unknownModel')}</code>
             {request.unknownReason !== undefined ? <small className="dsh-billing-secondary">{t(`billing.reason.${request.unknownReason}` as DshBalanceLocaleKey)}</small> : null}
           </div>
           <div>
@@ -214,42 +217,47 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
 }
 
 function useUsageResult(loadUsage: UsageTabInjected['loadUsage'], options: UsageLoadOptions, revision: string) {
-  const [result, setResult] = useState<UsageApiResponse>()
+  const [state, setState] = useState<{ options: UsageLoadOptions; result: UsageApiResponse }>()
   const [loading, setLoading] = useState(true)
-  const load = useCallback(async (forceRefresh: boolean, signal: AbortSignal) => {
+  const active = useRef<AbortController>()
+  const load = useCallback(async (forceRefresh: boolean) => {
+    active.current?.abort()
+    const controller = new AbortController()
+    active.current = controller
+    const { signal } = controller
     setLoading(true)
     try {
-      setResult(await loadUsage({ ...options, forceRefresh }, signal))
-    } catch (error) {
-      if (!signal.aborted) setResult({ ok: false, code: 'UPSTREAM_UNAVAILABLE', message: error instanceof Error ? error.message : '' })
+      const result = await loadUsage({ ...options, forceRefresh }, signal)
+      if (!signal.aborted) setState({ options, result })
+    } catch {
+      if (!signal.aborted) setState({ options, result: { ok: false, code: 'UPSTREAM_UNAVAILABLE', message: '' } })
     } finally {
       if (!signal.aborted) setLoading(false)
     }
   }, [loadUsage, options])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void load(false, controller.signal)
-    return () => { controller.abort() }
+    void load(false)
+    return () => { active.current?.abort() }
   }, [load, revision])
 
-  return { result, loading, refresh: () => {
-    const controller = new AbortController()
-    void load(true, controller.signal)
-  } }
+  return { result: state?.options === options ? state.result : undefined, loading, refresh: () => { void load(true) } }
 }
 
-export function BillingOverview({ loadUsage, t }: BillingOverviewProps) {
+export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps) {
+  const [providerScope, setProviderScope] = useState<'selected' | 'all'>('selected')
+  const selectedProvider = providerScope === 'all' ? undefined : provider
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
   const [range, setRange] = useState<'today' | '7d' | '30d' | 'all'>('30d')
   const options = useMemo<UsageLoadOptions>(() => ({
     scope: 'all',
+    ...(selectedProvider === undefined ? {} : { provider: selectedProvider }),
     timeZone,
     ...(range === 'all' ? {} : {
       from: range === 'today' ? localDateKey(timeZone) : dateDaysAgo(timeZone, range === '7d' ? 6 : 29),
       to: localDateKey(timeZone),
     }),
-  }), [range, timeZone])
+  }), [range, timeZone, selectedProvider])
   const { result, loading, refresh } = useUsageResult(loadUsage, options, JSON.stringify(options))
 
   return (
@@ -260,6 +268,10 @@ export function BillingOverview({ loadUsage, t }: BillingOverviewProps) {
           <p className="dsh-balance-copy">{t('billing.copy', { timeZone })}</p>
         </div>
         <div className="dsh-billing-actions">
+          {provider === undefined ? null : <select aria-label={t('billing.provider')} value={providerScope} onChange={event => setProviderScope(event.target.value as typeof providerScope)}>
+            <option value="selected">{findBalanceProvider(provider)?.name ?? provider}</option>
+            <option value="all">{t('panel.allProviders')}</option>
+          </select>}
           <select aria-label={t('billing.range')} value={range} onChange={event => setRange(event.target.value as typeof range)}>
             <option value="today">{t('billing.todayRange')}</option>
             <option value="7d">{t('billing.sevenDays')}</option>

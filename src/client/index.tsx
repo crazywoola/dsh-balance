@@ -2,6 +2,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { BalanceApiResponse, ModelsApiResponse } from '../types.ts'
 import type { BalanceProviderId } from '../providers.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from '../types.ts'
@@ -22,7 +23,7 @@ export type { DeepSeekPanelInjected, DeepSeekPanelProps } from './DeepSeekPanel.
 export type { ModelsTabInjected, ModelsTabProps } from './ModelsTab.tsx'
 export type { UsageLoadOptions, UsageTabInjected, BillingOverviewProps, BillingViewProps } from './BillingTab.tsx'
 
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'modelDirectories']
 
 async function loadBalance(forceRefresh: boolean, signal: AbortSignal, provider: BalanceProviderId = 'deepseek'): Promise<BalanceApiResponse> {
   const params = new URLSearchParams({ provider })
@@ -63,6 +64,7 @@ async function loadUsage(options: UsageLoadOptions, signal: AbortSignal): Promis
     scope: options.scope,
     timeZone: options.timeZone,
   })
+  if (options.provider !== undefined) params.set('provider', options.provider)
   if (options.sessionId !== undefined) params.set('sessionId', options.sessionId)
   if (options.from !== undefined) params.set('from', options.from)
   if (options.to !== undefined) params.set('to', options.to)
@@ -120,6 +122,6 @@ export function apply(ctx: ClientContext): void {
     id: 'deepseek-balance',
     order: 10,
     locale: LOCALE_NS,
-    inject: (): BalanceDockInjected => ({ loadBalance }),
+    inject: (sessionId): BalanceDockInjected => ({ loadBalance, selection: ctx.modelDirectories.directoryFor(sessionId) }),
   }, BalanceDock))
 }

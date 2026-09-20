@@ -122,3 +122,42 @@ describe('aggregateBilling', () => {
     expect(normalizeUsdToCny(Number.NaN)).toBeUndefined()
   })
 })
+
+describe('provider and model switching', () => {
+  it('uses headers written after step/start and message source when a call finishes', () => {
+    const events = [
+      requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1),
+      requestHeader(2, '2026-08-17T00:00:01Z', 'StepFun', 'step-3.5-flash'),
+      assistant(3, { inputTokens: 10, outputTokens: 5 }),
+      stepStart(4, 2),
+      event('assistant/message', { turn: 2, step: 0, message: { source: { provider: 'ToKeNeR', model: 'deepseek-v4-flash' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 5, '2026-08-17T00:00:10Z'),
+    ]
+    const records = extractSessionUsage('switch', header, events, utcOptions)
+    expect(records[0]).toMatchObject({ provider: 'stepfun', model: 'step-3.5-flash', unknownReason: 'unknown-model', costUsd: null })
+    expect(records[1]).toMatchObject({ provider: 'tokener', model: 'deepseek-v4-flash', unknownReason: 'unknown-model', costUsd: null })
+    expect(extractSessionUsage('switch', header, events, { ...utcOptions, provider: 'TOKENER' })).toEqual([records[1]])
+  })
+
+  it('dates later requests by their own start instead of a reused header', () => {
+    const events = [requestHeader(0, '2026-08-17T00:00:00Z', 'DEEPSEEK'), stepStart(1), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 }),
+      stepStart(3, 2, 0, '2026-08-18T01:00:00Z'), assistant(4, { inputTokens: 1_000_000, outputTokens: 0 }, 2, 0, '2026-08-18T01:00:01Z')]
+    const aggregate = aggregateBilling([{ sessionId: 'a', title: 'A', header, events }], utcOptions)
+    expect(aggregate.summary.byDay.map(day => [day.date, day.costUsd])).toEqual([['2026-08-18', 0.44], ['2026-08-17', 0.22]])
+    expect(aggregate.summary.byModel).toHaveLength(1)
+    expect(aggregate.summary.byModel[0]?.provider).toBe('deepseek')
+    expect(extractSessionUsage('a', header, events, { ...utcOptions, from: '2026-08-18' })).toHaveLength(1)
+  })
+
+  it('keeps provider totals separate even for the same model and filters all breakdowns consistently', () => {
+    const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5, cacheReadTokens: 20, cacheWriteTokens: 10 }),
+      stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'TOKENER'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2)]
+    const source = { sessionId: 'a', title: 'A', header, events }
+    expect(aggregateBilling([source], utcOptions).summary.byModel).toHaveLength(2)
+    const { summary, requestsBySession } = aggregateBilling([source], { ...utcOptions, provider: 'tokener' })
+    expect(summary.totals).toMatchObject({ requests: 1, inputTokens: 7, outputTokens: 8, unpricedRequests: 1 })
+    expect(summary.byModel).toHaveLength(1)
+    expect(summary.byDay[0]?.requests).toBe(1)
+    expect(summary.bySession[0]?.requests).toBe(1)
+    expect(requestsBySession.get('a')).toHaveLength(1)
+  })
+})

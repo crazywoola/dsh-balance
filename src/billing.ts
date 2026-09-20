@@ -1,4 +1,5 @@
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import { findBalanceProvider } from './providers.ts'
 import { isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
 
 export const USAGE_ROUTE = '/dsh-balance/api/usage'
@@ -142,6 +143,7 @@ export interface UsageQuery {
   from?: string
   to?: string
   refresh: boolean
+  provider?: string
 }
 
 interface RequestContext {
@@ -244,7 +246,7 @@ function messageMetadata(event: SessionEvent): { provider: string; model: string
 
 /** Resolve the versioned price for one request. */
 export function resolveBillingPrice(provider: string, model: string, time: number): BillingPrice | undefined {
-  if (provider !== 'deepseek') return undefined
+  if (findBalanceProvider(provider)?.id !== 'deepseek') return undefined
   const canonicalModel = model === 'deepseek-chat' || model === 'deepseek-reasoner'
     ? (time >= PEAK_EFFECTIVE_FROM ? 'deepseek-v4-flash' : model)
     : model
@@ -253,7 +255,7 @@ export function resolveBillingPrice(provider: string, model: string, time: numbe
     : CURRENT_PRICES[canonicalModel]
   if (rates === undefined) return undefined
   return {
-    provider,
+    provider: 'deepseek',
     model: canonicalModel,
     effectiveFrom: new Date(time < PEAK_EFFECTIVE_FROM ? 0 : PEAK_EFFECTIVE_FROM).toISOString(),
     pricingVersion: time < PEAK_EFFECTIVE_FROM ? 'deepseek-legacy' : BILLING_PRICING_VERSION,
@@ -263,7 +265,7 @@ export function resolveBillingPrice(provider: string, model: string, time: numbe
 
 /** Compute one request charge. Cache writes are billed as cache misses. */
 export function calculateRequestCost(usage: BillingUsage, price: BillingPrice, time: number): number {
-  const multiplier = isPeakHour(new Date(time)) ? 2 : 1
+  const multiplier = findBalanceProvider(price.provider)?.id === 'deepseek' && isPeakHour(new Date(time)) ? 2 : 1
   const missTokens = usage.inputTokens + usage.cacheWriteTokens
   return roundMoney((
     missTokens * price.cacheMissUsdPerMillion
@@ -293,29 +295,37 @@ export function extractSessionUsage(
   sessionId: string,
   header: Pick<SessionHeader, 'seedLength'>,
   events: readonly SessionEvent[],
-  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to'>,
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'>,
 ): UsageRequestRecord[] {
   // The inherited prefix is still needed to recover the first live request's header,
   // but its assistant messages must never be charged again in a fork.
   const seedLength = header.seedLength ?? 0
   let latestRequest: RequestContext | undefined
-  const requests = new Map<string, RequestContext>()
+  const requests = new Map<string, { metadata: RequestContext | undefined; time: number }>()
+  let activeStep: string | undefined
   const records: UsageRequestRecord[] = []
 
   for (const event of events) {
-    const metadata = readRequestMetadata(event)
-    if (metadata !== undefined) latestRequest = metadata
+    if (event.type === 'request/header') {
+      latestRequest = readRequestMetadata(event)
+      // Harness writes changed headers after step/start, including retry changes.
+      if (activeStep !== undefined) requests.set(activeStep, { metadata: latestRequest, time: event.time })
+    }
     if (event.type === 'step/start') {
-      if (latestRequest !== undefined) requests.set(stepKey(event.data.turn, event.data.step), latestRequest)
+      activeStep = stepKey(event.data.turn, event.data.step)
+      requests.set(activeStep, { metadata: latestRequest, time: event.time })
       continue
     }
+    if (event.type === 'step/end') activeStep = undefined
     if (event.type !== 'assistant/message' || event.seq < seedLength) continue
 
-    const request = requests.get(stepKey(event.data.turn, event.data.step)) ?? latestRequest
-    const fallback = messageMetadata(event)
-    const provider = request?.provider ?? fallback?.provider ?? null
-    const model = request?.model ?? fallback?.model ?? null
+    const request = requests.get(stepKey(event.data.turn, event.data.step))
+    // The completed message records the actual call, even if selection changed in flight.
+    const metadata = messageMetadata(event) ?? request?.metadata ?? latestRequest
+    const provider = metadata === undefined ? null : (findBalanceProvider(metadata.provider)?.id ?? metadata.provider)
+    const model = metadata?.model ?? null
     const time = request?.time ?? event.time
+    if (options.provider !== undefined && provider !== (findBalanceProvider(options.provider)?.id ?? options.provider)) continue
     if (!inDateRange(time, options.timeZone, options.from, options.to)) continue
 
     const usage = readUsage(event.data.usage)
@@ -330,7 +340,7 @@ export function extractSessionUsage(
     else if (provider === null || model === null) unknownReason = 'missing-request-metadata'
     else {
       const price = resolveBillingPrice(provider, model, time)
-      if (price === undefined) unknownReason = provider === 'deepseek' ? 'unknown-model' : 'unknown-provider'
+      if (price === undefined) unknownReason = findBalanceProvider(provider) !== undefined ? 'unknown-model' : 'unknown-provider'
       else {
         costUsd = calculateRequestCost(usage, price, time)
         pricingVersion = price.pricingVersion
@@ -374,7 +384,7 @@ function aggregateRecords(
     addTotals(totals, record)
     const provider = record.provider ?? 'unknown'
     const model = record.model ?? 'unknown'
-    const modelKey = `${provider}:${model}`
+    const modelKey = JSON.stringify([provider, model])
     const modelTotal = models.get(modelKey) ?? { ...emptyTotals(), provider, model }
     addTotals(modelTotal, record)
     models.set(modelKey, modelTotal)
@@ -451,7 +461,7 @@ export interface BillingSource {
 /** Aggregate one or many sessions for the settings page or session view. */
 export function aggregateBilling(
   sources: readonly BillingSource[],
-  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to'> & { usdToCny?: number },
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number },
 ): { summary: UsageSummary; requestsBySession: ReadonlyMap<string, UsageRequestRecord[]> } {
   const records: UsageRequestRecord[] = []
   const titles = new Map<string, string>()

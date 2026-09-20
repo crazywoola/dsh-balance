@@ -131,3 +131,43 @@ describe('provider models route', () => {
     expect(JSON.stringify([result, warn.mock.calls])).not.toContain('private-secret')
   })
 })
+
+describe('Tokener route isolation', () => {
+  const payload = { availableUsdMicro: '31000000', purchasedAvailableUsdMicro: '30000000', grantedAvailableUsdMicro: '1000000', status: 'active' }
+  it('never sends an inference credential to the management API, including inference overrides', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(payload))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({ providers: [{ id: 'TOKENER', apiKeyRef: 'CUSTOM_MODEL_KEY', baseUrl: 'https://inference.example/v1' }] })
+    expect((await request('?provider=Tokener')).body).toMatchObject({ provider: 'tokener', balanceInfos: [{ totalBalance: '31.000000' }] })
+    expect(resolve).toHaveBeenCalledWith('TOKENER_MANAGEMENT_TOKEN')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://console.tokener.ai/api/v1/billing/balance')
+    expect((await request('?provider=TOKENER')).body.source).toBe('cache')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('queries the model API with the model key and never uses the PAT', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({ object: 'list', data: [{ id: 'water18-0910', object: 'model', owned_by: 'tokener' }] }))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({}, '/dsh-balance/api/models')
+    expect((await request('?provider=Tokener')).body).toMatchObject({ provider: 'tokener', models: [{ id: 'water18-0910' }] })
+    expect(resolve).toHaveBeenCalledWith('TOKENER_API_KEY')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://api.tokener.ai/v1/models')
+  })
+
+  it('supports explicit management overrides and validates their URL', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(payload))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({ providers: [{ id: 'Tokener', balanceApiKeyRef: 'CUSTOM_PAT', balanceBaseUrl: 'http://localhost:3091/api/v1' }] })
+    expect((await request('?provider=tokener')).status).toBe(200)
+    expect(resolve).toHaveBeenCalledWith('CUSTOM_PAT')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('http://localhost:3091/api/v1/billing/balance')
+    expect(() => setup({ providers: [{ id: 'tokener', balanceBaseUrl: 'http://example.com' }] })).toThrow('HTTPS')
+  })
+
+  it('does not fall back to the model key when the PAT is missing', async () => {
+    const { request, resolve } = setup()
+    resolve.mockResolvedValueOnce(undefined as never)
+    expect(await request('?provider=tokener')).toMatchObject({ status: 401, body: { code: 'MISSING_API_KEY', message: expect.stringContaining('TOKENER_MANAGEMENT_TOKEN') } })
+    expect(resolve).toHaveBeenCalledTimes(1)
+  })
+})

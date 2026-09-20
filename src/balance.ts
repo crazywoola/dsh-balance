@@ -75,10 +75,39 @@ export function parseStepFunBalance(value: unknown): BalancePayload {
   }
 }
 
+/** Tokener encodes USD as integer millionths; keep monetary values exact. */
+function usdMicroField(row: Record<string, unknown>, key: string): string {
+  const value = row[key]
+  if (typeof value !== 'string' || !/^-?\d+$/.test(value)) {
+    throw new BalanceQueryError('INVALID_RESPONSE', `Tokener balance response has an invalid ${key}`, 502)
+  }
+  const micro = BigInt(value)
+  const absolute = micro < 0n ? -micro : micro
+  const fraction = String(absolute % 1_000_000n).padStart(6, '0')
+  return `${micro < 0n ? '-' : ''}${absolute / 1_000_000n}.${fraction}`
+}
+
+export function parseTokenerBalance(value: unknown): BalancePayload {
+  if (!isRecord(value) || (value.status !== 'active' && value.status !== 'suspended')) {
+    throw new BalanceQueryError('INVALID_RESPONSE', 'Tokener returned an invalid balance response', 502)
+  }
+  const totalBalance = usdMicroField(value, 'availableUsdMicro')
+  return {
+    isAvailable: value.status === 'active' && BigInt(value.availableUsdMicro as string) > 0n,
+    balanceInfos: [{
+      currency: 'USD',
+      totalBalance,
+      toppedUpBalance: usdMicroField(value, 'purchasedAvailableUsdMicro'),
+      grantedBalance: usdMicroField(value, 'grantedAvailableUsdMicro'),
+    }],
+  }
+}
+
 /** Add a provider's endpoint and parser here; transport and error handling are shared. */
 const adapters: Record<BalanceProviderId, { path: string; parse: (value: unknown) => BalancePayload }> = {
   deepseek: { path: 'user/balance', parse: parseDeepSeekBalance },
   stepfun: { path: 'accounts', parse: parseStepFunBalance },
+  tokener: { path: 'billing/balance', parse: parseTokenerBalance },
 }
 
 function upstreamFailure(status: number, provider: string): BalanceQueryError {

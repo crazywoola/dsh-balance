@@ -31,8 +31,8 @@ export const balanceStyles = `
 .dsh-ledger-orbit i:nth-child(3) { transform: rotate(85deg) scaleX(.5); }
 .dsh-ledger-orbit span { display: grid; place-items: center; width: 40px; height: 40px; background: #d7ed9d; color: #233316; border-radius: 50%; font-size: 24px; transition: transform .4s ease; }
 .dsh-ledger-header:hover .dsh-ledger-orbit span { transform: rotate(45deg); }
-.dsh-provider-switch { display: flex; gap: 8px; padding-bottom: 24px; border-bottom: 1px solid var(--ledger-line); }
-.dsh-provider-switch button { display: flex; align-items: center; gap: 14px; flex: 1; max-width: 270px; min-height: 58px; padding: 12px 18px; border: 1px solid var(--ledger-line); border-radius: 4px; color: var(--ledger-ink); background: transparent; font: inherit; font-size: 16px; cursor: pointer; transition: background .2s, transform .2s; }
+.dsh-provider-switch { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 24px; border-bottom: 1px solid var(--ledger-line); }
+.dsh-provider-switch button { display: flex; align-items: center; gap: 14px; flex: 1 1 140px; min-width: 0; min-height: 58px; padding: 12px 18px; border: 1px solid var(--ledger-line); border-radius: 4px; color: var(--ledger-ink); background: transparent; font: inherit; font-size: 16px; cursor: pointer; transition: background .2s, transform .2s; }
 .dsh-provider-switch button:hover { background: var(--ledger-paper); transform: translateY(-2px); }
 .dsh-provider-switch button[aria-pressed='true'] { color: #e5f6bd; background: #25352e; border-color: #25352e; }
 .dsh-provider-index { font-family: ui-monospace, monospace; font-size: 10px; opacity: .7; }
@@ -192,7 +192,7 @@ export const balanceStyles = `
   width: 100%;
   max-width: var(--dsh-chat-content-width);
   margin: 0 auto;
-  padding: 4px calc(var(--dsh-composer-side-clearance) + 16px) 0;
+  padding: 4px calc(var(--dsh-composer-side-clearance, 0px) + 16px) 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 20px;
@@ -201,6 +201,7 @@ export const balanceStyles = `
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.dsh-balance-dock-model { display: inline-block; max-width: 40%; margin-left: 8px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .dsh-balance-dock-dot {
   display: inline-block;
   width: 6px;
@@ -219,10 +220,12 @@ export const balanceStyles = `
   color: var(--dsw-alias-separator-primary);
 }
 .dsh-balance-dock-value {
+  display: inline-block;
   color: var(--dsw-alias-label-secondary);
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 640px) {
+  .dsh-balance-dock { white-space: normal; }
   .dsh-balance-summary { align-items: flex-start; }
   .dsh-balance-grid,
   .dsh-model-grid,

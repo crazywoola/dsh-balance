@@ -1,5 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { BalanceDock } from '../../src/client/BalanceDock.tsx'
 import { DeepSeekPanel } from '../../src/client/DeepSeekPanel.tsx'
 import { balanceStyles } from '../../src/client/styles.ts'
 import { en, zh } from '../../src/client/locales.ts'
@@ -26,6 +27,7 @@ const loadBalance = async (refresh, signal, provider = 'deepseek') => {
     ...(provider === 'stepfun' ? { accountType: params.get('account') === 'postpaid' ? 'postpaid' : 'prepaid' } : {}),
     balanceInfos: state === 'empty' ? [] : provider === 'stepfun'
       ? [{ currency: 'CNY', totalBalance: params.get('amount') ?? '256.80', totalCashBalance: '500', totalVoucherBalance: '26' }]
+      : provider === 'tokener' ? [{ currency: 'USD', totalBalance: '31.25', toppedUpBalance: '30', grantedBalance: '1.25' }]
       : [{ currency: 'CNY', totalBalance: '128.50', toppedUpBalance: '120', grantedBalance: '8.50' }, { currency: 'USD', totalBalance: '18.25', toppedUpBalance: '17', grantedBalance: '1.25' }],
   }
 }
@@ -34,7 +36,37 @@ const loadModels = async (refresh, signal, provider = 'deepseek') => {
   signal.throwIfAborted()
   return { ok: true, provider, fetchedAt, source: refresh ? 'live' : 'cache', models: provider === 'stepfun'
     ? [{ id: 'step-3.5-flash', ownedBy: 'stepai', created: 1713974400 }, { id: 'step-3.7-flash', ownedBy: 'stepai', created: 1713196800 }]
+    : provider === 'tokener' ? [{ id: 'water18-0910', ownedBy: 'tokener' }, { id: 'deepseek-v4-flash', ownedBy: 'deepseek' }]
     : [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }, { id: 'deepseek-v4-pro', ownedBy: 'deepseek' }] }
 }
-const loadUsage = async () => ({ ok: true, scope: 'all', fetchedAt, source: 'live', ...aggregateBilling([], { timeZone: 'Asia/Shanghai' }) })
-createRoot(document.getElementById('root')).render(<DeepSeekPanel t={t} loadBalance={loadBalance} loadModels={loadModels} loadUsage={loadUsage} />)
+const loadUsage = async (options) => {
+  const events = ['deepseek', 'stepfun', 'tokener'].flatMap((provider, index) => [
+    { type: 'step/start', seq: index * 2, time: Date.now(), data: { turn: index + 1, step: 0 } },
+    { type: 'assistant/message', seq: index * 2 + 1, time: Date.now(), data: { turn: index + 1, step: 0,
+      message: { source: { provider, model: provider === 'deepseek' ? 'deepseek-v4-flash' : provider === 'stepfun' ? 'step-3.5-flash' : 'water18-0910' } },
+      usage: { inputTokens: 10000, outputTokens: 5000, cacheReadTokens: 2000, cacheWriteTokens: 1000 } } },
+  ])
+  return { ok: true, scope: 'all', fetchedAt, source: 'live', ...aggregateBilling([{ sessionId: 'sample', title: '示例会话 / Sample', header: {}, events }], options) }
+}
+const choices = [
+  { provider: 'deepseek', model: 'deepseek-v4-flash' },
+  { provider: 'StepFun', model: 'step-3.5-flash' },
+  { provider: 'Tokener', model: 'water18-0910' },
+  { provider: 'Tokener', model: 'deepseek-v4-flash' },
+  { provider: 'Other', model: 'custom-model' },
+]
+let snapshot = { current: choices[0], status: 'ready' }
+const listeners = new Set()
+const selection = {
+  store: { getSnapshot: () => snapshot, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener) } },
+  load: async () => {},
+}
+createRoot(document.getElementById('root')).render(<>
+  <div style={{ padding: '16px', marginBottom: '24px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '8px' }}>
+    <label>示例模型 / Sample model <select aria-label="Sample model" onChange={event => { snapshot = { ...snapshot, current: choices[Number(event.target.value)] }; listeners.forEach(listener => listener()) }}>
+      {choices.map((choice, index) => <option key={index} value={index}>{choice.provider} / {choice.model}</option>)}
+    </select></label>
+    <BalanceDock t={t} selection={selection} sessionId="preview" loadBalance={loadBalance} />
+  </div>
+  <DeepSeekPanel t={t} loadBalance={loadBalance} loadModels={loadModels} loadUsage={loadUsage} />
+</>)

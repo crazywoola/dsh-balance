@@ -78,7 +78,7 @@ export function BalanceSection({ loadBalance, t, provider = 'deepseek' }: Balanc
       {result?.ok === false ? (
         <div className="dsh-balance-error" role="alert">
           <strong>{providerName} / {t(errorLocaleKey(result.code))}</strong>
-          {result.code === 'MISSING_API_KEY' ? <p>{t(provider === 'deepseek' ? 'balance.setupDeepSeek' : 'balance.setup', { provider: providerName, ref: findBalanceProvider(provider)!.apiKeyRef })}</p> : null}
+          {result.code === 'MISSING_API_KEY' ? <p>{t(provider === 'tokener' ? 'balance.setupTokener' : provider === 'deepseek' ? 'balance.setupDeepSeek' : 'balance.setup', { provider: providerName, ref: findBalanceProvider(provider)!.apiKeyRef })}</p> : null}
         </div>
       ) : null}
       {result?.ok === true ? (

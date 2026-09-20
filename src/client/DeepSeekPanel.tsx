@@ -39,8 +39,8 @@ export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSee
       <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
       <div className="dsh-ledger-section-label"><span>02 / {t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
       <ModelsSection key={`models-${provider}`} provider={provider} loadModels={loadModels} t={t} />
-      <div className="dsh-ledger-section-label"><span>03 / {t('panel.activity')}</span><span>{t('panel.allProviders')}</span></div>
-      <BillingOverview loadUsage={loadUsage} t={t} />
+      <div className="dsh-ledger-section-label"><span>03 / {t('panel.activity')}</span></div>
+      <BillingOverview provider={provider} loadUsage={loadUsage} t={t} />
     </div>
   )
 }
