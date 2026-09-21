@@ -98,7 +98,7 @@ pnpm check
 pnpm preview
 ```
 
-预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。
+预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。Tokener、实时模型余额和统计修复自 `0.7.0` 起提供。
 
 ## License
 
