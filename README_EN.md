@@ -2,9 +2,9 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-A DeepSeek Harness plugin for checking DeepSeek / StepFun / Tokener API balances, available provider models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
+A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, available provider models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
 
-The redesigned account ledger switches between DeepSeek, StepFun, and Tokener. Run `pnpm preview` to explore it with sample data.
+The redesigned account ledger switches between DeepSeek and StepFun. Run `pnpm preview` to explore it with sample data.
 
 The composer readout follows the current session’s provider and model. The Settings provider selection is independent.
 
@@ -12,7 +12,6 @@ The composer readout follows the current session’s provider and model. The Set
 
 - DeepSeek: total, topped-up, and granted balances
 - StepFun: available balance, total cash credited, total vouchers granted, and prepaid / postpaid account type
-- Tokener: available USD, purchased and granted balances, with separate management and inference credentials
 - Independent provider caches and case-insensitive Provider IDs
 - Show the current provider, model, and balance below the composer, following both the selector and `/model`
 - Fetch available models, owners, and creation dates from the selected provider’s `/models` API
@@ -59,30 +58,11 @@ Existing top-level `apiKeyRef` / `baseUrl` settings continue to serve DeepSeek. 
 
 Model lists use the [StepFun list API](https://platform.stepfun.com/docs/zh/api-reference/models/list) at `GET /v1/models`, parsing `id`, `owned_by`, and `created` (Unix seconds) from each [Model object](https://platform.stepfun.com/docs/zh/api-reference/models/object). These fields are already returned in the list, so individual model retrieval is unnecessary. The Host route is `GET /dsh-balance/api/models?provider=StepFun`, with isolated provider caches and `refresh=1` to force a refresh.
 
-## Tokener setup
-
-Add a custom provider with ID `Tokener` (case-insensitive), base URL `https://api.tokener.ai/v1`, and its inference API key (default reference `TOKENER_API_KEY`). Available models are read from `GET /v1/models`.
-
-For balances, create a personal access token (PAT) in Tokener account settings and configure `TOKENER_MANAGEMENT_TOKEN` in the Harness launch environment or credential store. **An inference API key cannot replace this token.** Balances use Bearer authentication at `GET https://console.tokener.ai/api/v1/billing/balance`. Integer USD millionths are converted exactly; purchased and granted amounts are remaining balances.
-
-Override credentials or self-hosted endpoints separately:
-
-```yaml
-providers:
-  - id: Tokener
-    apiKeyRef: MY_TOKENER_API_KEY
-    baseUrl: https://api.tokener.ai/v1
-    balanceApiKeyRef: MY_TOKENER_PAT
-    balanceBaseUrl: https://console.tokener.ai/api/v1
-```
-
-Tokener’s inference overrides do not change its management credentials or endpoint. See [Tokener documentation](https://www.tokener.ai/zh/docs), the [official balance route](https://github.com/langgenius/ai-gateway/blob/main/apps/console/src/app/api/v1/billing/balance/route.ts), and [response fields](https://github.com/langgenius/ai-gateway/blob/main/apps/console/src/server/billing.ts).
-
 ## Usage accounting
 
 Each request is attributed to its actual message source, with request headers as a fallback for older logs. Request time determines date grouping and peak pricing. Token totals include uncached input, output, cache reads, and cache writes. Settings defaults to the selected provider, with an All providers option; the session view keeps mixed-provider history.
 
-Built-in prices currently cover official DeepSeek pricing only. StepFun, Tokener, and other requests without reliable historical pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
+Built-in prices currently cover official DeepSeek pricing only. StepFun and other requests without reliable historical pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
 
 ## Extension and design
 
@@ -98,7 +78,7 @@ pnpm check
 pnpm preview
 ```
 
-The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The sample model selector also exercises the composer readout. StepFun balance and model queries and the redesigned account page are available starting with `0.6.0`. Tokener support, live model balances, and usage accounting fixes are available starting with `0.7.0`.
+The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The sample model selector also exercises the composer readout. StepFun balance and model queries and the redesigned account page are available starting with `0.6.0`. Live model balances, and usage accounting fixes are available starting with `0.7.0`.
 
 ## License
 

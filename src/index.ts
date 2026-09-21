@@ -8,7 +8,7 @@ import { BalanceQueryError, queryProviderBalance } from './balance.ts'
 import { aggregateBilling, assertTimeZone, normalizeUsdToCny, USAGE_ROUTE } from './billing.ts'
 import { ModelQueryError, queryProviderModels } from './models.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
-import { BALANCE_PROVIDERS, balanceDefaults, findBalanceProvider } from './providers.ts'
+import { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
 import type {
   BalanceApiResponse,
   BalanceSuccess,
@@ -30,8 +30,6 @@ export interface ProviderConfig {
   id: string
   apiKeyRef?: string
   baseUrl?: string
-  balanceApiKeyRef?: string
-  balanceBaseUrl?: string
 }
 
 export interface Config {
@@ -49,8 +47,6 @@ export const Config: z<Config> = z.object({
     id: z.string().required(),
     apiKeyRef: z.string().role('credential-ref').required(false),
     baseUrl: z.string().required(false),
-    balanceApiKeyRef: z.string().role('credential-ref').required(false),
-    balanceBaseUrl: z.string().required(false),
   })).required(false),
   apiKeyRef: z.string().role('credential-ref').default('DEEPSEEK_API_KEY'),
   baseUrl: z.string().default('https://api.deepseek.com'),
@@ -155,30 +151,26 @@ async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number
 export function apply(ctx: Context, config: Config): void {
   validateBaseUrl(config.baseUrl)
   credentialRef(config.apiKeyRef)
-  const providerConfigs = new Map<string, { apiKeyRef: string; baseUrl: string; balanceApiKeyRef: string; balanceBaseUrl: string }>()
-  const configured = new Map<string, ProviderConfig>()
+  const providerConfigs = new Map<string, { apiKeyRef: string; baseUrl: string }>(
+    BALANCE_PROVIDERS.map(provider => [provider.id, {
+      apiKeyRef: provider.id === 'deepseek' ? config.apiKeyRef : provider.apiKeyRef,
+      baseUrl: provider.id === 'deepseek' ? config.baseUrl : provider.baseUrl,
+    }]),
+  )
+  const configured = new Set<string>()
   for (const override of config.providers ?? []) {
     const provider = findBalanceProvider(override.id)
     if (provider === undefined || configured.has(provider.id)) {
       throw new Error('dsh-balance: unsupported or duplicate balance provider')
     }
-    configured.set(provider.id, override)
-  }
-  for (const provider of BALANCE_PROVIDERS) {
-    const override = configured.get(provider.id)
-    const apiKeyRef = override?.apiKeyRef ?? (provider.id === 'deepseek' ? config.apiKeyRef : provider.apiKeyRef)
-    const baseUrl = override?.baseUrl ?? (provider.id === 'deepseek' ? config.baseUrl : provider.baseUrl)
-    const defaults = balanceDefaults(provider)
+    configured.add(provider.id)
+    const defaults = providerConfigs.get(provider.id)!
     const entry = {
-      apiKeyRef,
-      baseUrl,
-      balanceApiKeyRef: override?.balanceApiKeyRef ?? ('balanceApiKeyRef' in provider ? defaults.apiKeyRef : apiKeyRef),
-      balanceBaseUrl: override?.balanceBaseUrl ?? ('balanceBaseUrl' in provider ? defaults.baseUrl : baseUrl),
+      apiKeyRef: override.apiKeyRef ?? defaults.apiKeyRef,
+      baseUrl: override.baseUrl ?? defaults.baseUrl,
     }
     validateBaseUrl(entry.baseUrl)
-    validateBaseUrl(entry.balanceBaseUrl)
     credentialRef(entry.apiKeyRef)
-    credentialRef(entry.balanceApiKeyRef)
     providerConfigs.set(provider.id, entry)
   }
   const balanceCache = new Map<string, { expiresAt: number; value: BalanceSuccess }>()
@@ -211,18 +203,18 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     try {
-      const credential = await ctx.credentials.resolve(credentialRef(settings.balanceApiKeyRef))
+      const credential = await ctx.credentials.resolve(credentialRef(settings.apiKeyRef))
       if (credential === undefined) {
         sendJson(res, 401, {
           ok: false,
           code: 'MISSING_API_KEY',
-          message: `未配置 ${settings.balanceApiKeyRef}，请配置 ${provider.name} 余额查询凭据`,
+          message: `未配置 ${settings.apiKeyRef}，请配置 ${provider.name} 余额查询凭据`,
         })
         return
       }
       const result = await queryProviderBalance(provider.id, {
         apiKey: credential.value,
-        baseUrl: settings.balanceBaseUrl,
+        baseUrl: settings.baseUrl,
         timeoutMs: config.timeoutMs,
       })
       const value: BalanceSuccess = {
@@ -408,8 +400,8 @@ export function apply(ctx: Context, config: Config): void {
   )
 }
 
-export { BalanceQueryError, parseDeepSeekBalance, parseStepFunBalance, parseTokenerBalance, queryDeepSeekBalance, queryStepFunBalance, queryProviderBalance } from './balance.ts'
-export { BALANCE_PROVIDERS, balanceDefaults, findBalanceProvider } from './providers.ts'
+export { BalanceQueryError, parseDeepSeekBalance, parseStepFunBalance, queryDeepSeekBalance, queryStepFunBalance, queryProviderBalance } from './balance.ts'
+export { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
 export type { BalanceProviderId } from './providers.ts'
 export { ModelQueryError, parseModel, parseModels, parseDeepSeekModels, queryDeepSeekModels, queryProviderModels } from './models.ts'
 export {

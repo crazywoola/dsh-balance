@@ -130,12 +130,12 @@ describe('provider and model switching', () => {
       requestHeader(2, '2026-08-17T00:00:01Z', 'StepFun', 'step-3.5-flash'),
       assistant(3, { inputTokens: 10, outputTokens: 5 }),
       stepStart(4, 2),
-      event('assistant/message', { turn: 2, step: 0, message: { source: { provider: 'ToKeNeR', model: 'deepseek-v4-flash' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 5, '2026-08-17T00:00:10Z'),
+      event('assistant/message', { turn: 2, step: 0, message: { source: { provider: 'other-provider', model: 'deepseek-v4-flash' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 5, '2026-08-17T00:00:10Z'),
     ]
     const records = extractSessionUsage('switch', header, events, utcOptions)
     expect(records[0]).toMatchObject({ provider: 'stepfun', model: 'step-3.5-flash', unknownReason: 'unknown-model', costUsd: null })
-    expect(records[1]).toMatchObject({ provider: 'tokener', model: 'deepseek-v4-flash', unknownReason: 'unknown-model', costUsd: null })
-    expect(extractSessionUsage('switch', header, events, { ...utcOptions, provider: 'TOKENER' })).toEqual([records[1]])
+    expect(records[1]).toMatchObject({ provider: 'other-provider', model: 'deepseek-v4-flash', unknownReason: 'unknown-provider', costUsd: null })
+    expect(extractSessionUsage('switch', header, events, { ...utcOptions, provider: 'other-provider' })).toEqual([records[1]])
   })
 
   it('dates later requests by their own start instead of a reused header', () => {
@@ -150,10 +150,10 @@ describe('provider and model switching', () => {
 
   it('keeps provider totals separate even for the same model and filters all breakdowns consistently', () => {
     const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5, cacheReadTokens: 20, cacheWriteTokens: 10 }),
-      stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'TOKENER'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2)]
+      stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'STEPFUN'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2)]
     const source = { sessionId: 'a', title: 'A', header, events }
     expect(aggregateBilling([source], utcOptions).summary.byModel).toHaveLength(2)
-    const { summary, requestsBySession } = aggregateBilling([source], { ...utcOptions, provider: 'tokener' })
+    const { summary, requestsBySession } = aggregateBilling([source], { ...utcOptions, provider: 'stepfun' })
     expect(summary.totals).toMatchObject({ requests: 1, inputTokens: 7, outputTokens: 8, unpricedRequests: 1 })
     expect(summary.byModel).toHaveLength(1)
     expect(summary.byDay[0]?.requests).toBe(1)

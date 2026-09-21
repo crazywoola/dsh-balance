@@ -2,9 +2,9 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-DeepSeek Harness 插件，用于查询 DeepSeek / StepFun / Tokener API 余额、各提供方的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
+DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供方的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
-设置页采用账户总览布局，支持 DeepSeek / StepFun / Tokener 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
+设置页采用账户总览布局，支持 DeepSeek / StepFun 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
 
 聊天框底部会跟随当前会话所选的提供方与模型更新余额；设置页可独立切换提供方。
 
@@ -12,7 +12,6 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun / Tokener API 余额�
 
 - DeepSeek：查看总余额、充值余额和赠送余额
 - StepFun：查看可用余额、总充值金额、总赠送金额及预付费 / 后付费账户类型
-- Tokener：查看美元可用余额、充值余额与赠送余额；余额使用管理令牌，模型列表使用 API Key
 - 提供方独立缓存；支持大小写不敏感的 Provider ID
 - 在聊天框下方显示当前 provider、模型和余额，兼容模型选择器与 `/model` 切换
 - 从当前提供方的 `/models` 接口读取可用模型、所属组织与创建时间
@@ -59,30 +58,11 @@ providers:
 
 模型列表按 [StepFun 列表 API](https://platform.stepfun.com/docs/zh/api-reference/models/list) 请求 `GET /v1/models`，解析 [Model 对象](https://platform.stepfun.com/docs/zh/api-reference/models/object) 的 `id`、`owned_by`、`created`（秒级 Unix 时间戳）。列表已包含这些信息，不需要逐个调用单模型详情接口。Host 路由为 `GET /dsh-balance/api/models?provider=StepFun`，模型缓存按 provider 隔离，`refresh=1` 强制刷新。
 
-## Tokener 配置
-
-在“设置 → 模型”添加自定义提供方，Provider ID 为 `Tokener`（大小写不限），Base URL 为 `https://api.tokener.ai/v1`，保存 API Key（默认凭据 `TOKENER_API_KEY`）。模型列表请求 `GET /v1/models`。
-
-余额使用独立的个人访问令牌（PAT），请在 Tokener 账户设置创建后，将 `TOKENER_MANAGEMENT_TOKEN` 配置到启动 Harness 的环境或凭据存储中。**模型 API Key 不能替代此令牌。** 默认余额端点为 `GET https://console.tokener.ai/api/v1/billing/balance`，使用 Bearer 认证。金额从美元整数微单位精确转换，充值与赠送字段均为剩余余额。
-
-自定义凭据或自托管环境可分别覆盖：
-
-```yaml
-providers:
-  - id: Tokener
-    apiKeyRef: MY_TOKENER_API_KEY
-    baseUrl: https://api.tokener.ai/v1
-    balanceApiKeyRef: MY_TOKENER_PAT
-    balanceBaseUrl: https://console.tokener.ai/api/v1
-```
-
-Tokener 的 `apiKeyRef` / `baseUrl` 只用于模型接口；余额默认独立，避免把管理令牌发往推理端点。接入依据 [Tokener 文档](https://www.tokener.ai/zh/docs)、[官方余额路由](https://github.com/langgenius/ai-gateway/blob/main/apps/console/src/app/api/v1/billing/balance/route.ts) 与[响应字段](https://github.com/langgenius/ai-gateway/blob/main/apps/console/src/server/billing.ts)。
-
 ## 统计口径
 
 每条请求按实际返回消息的 provider / model 归属，兼容旧日志的请求头；日期和峰谷价格按该次请求时间计算。Token 总量包括未缓存输入、输出、缓存读取与缓存写入。设置页默认筛选所选 provider，也可选择“全部提供方”；会话页保留混用模型的完整历史。
 
-当前内置价格仅覆盖 DeepSeek 官方定价。StepFun、Tokener 等没有可靠历史价格的数据保留请求数与 token，显示“未计费”；不会套用同名 DeepSeek 模型价格，也不会将全部未知费用显示为 $0。混合统计仅累加已知价格，并注明不完整。账户余额是实时查询值，与本地用量估算独立。
+当前内置价格仅覆盖 DeepSeek 官方定价。StepFun 等没有可靠历史价格的数据保留请求数与 token，显示“未计费”；不会套用同名 DeepSeek 模型价格，也不会将全部未知费用显示为 $0。混合统计仅累加已知价格，并注明不完整。账户余额是实时查询值，与本地用量估算独立。
 
 ## 扩展与设计
 
@@ -98,7 +78,7 @@ pnpm check
 pnpm preview
 ```
 
-预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。Tokener、实时模型余额和统计修复自 `0.7.0` 起提供。
+预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。实时模型余额和统计修复自 `0.7.0` 起提供。
 
 ## License
 

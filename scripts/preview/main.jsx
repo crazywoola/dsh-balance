@@ -27,7 +27,6 @@ const loadBalance = async (refresh, signal, provider = 'deepseek') => {
     ...(provider === 'stepfun' ? { accountType: params.get('account') === 'postpaid' ? 'postpaid' : 'prepaid' } : {}),
     balanceInfos: state === 'empty' ? [] : provider === 'stepfun'
       ? [{ currency: 'CNY', totalBalance: params.get('amount') ?? '256.80', totalCashBalance: '500', totalVoucherBalance: '26' }]
-      : provider === 'tokener' ? [{ currency: 'USD', totalBalance: '31.25', toppedUpBalance: '30', grantedBalance: '1.25' }]
       : [{ currency: 'CNY', totalBalance: '128.50', toppedUpBalance: '120', grantedBalance: '8.50' }, { currency: 'USD', totalBalance: '18.25', toppedUpBalance: '17', grantedBalance: '1.25' }],
   }
 }
@@ -36,14 +35,13 @@ const loadModels = async (refresh, signal, provider = 'deepseek') => {
   signal.throwIfAborted()
   return { ok: true, provider, fetchedAt, source: refresh ? 'live' : 'cache', models: provider === 'stepfun'
     ? [{ id: 'step-3.5-flash', ownedBy: 'stepai', created: 1713974400 }, { id: 'step-3.7-flash', ownedBy: 'stepai', created: 1713196800 }]
-    : provider === 'tokener' ? [{ id: 'water18-0910', ownedBy: 'tokener' }, { id: 'deepseek-v4-flash', ownedBy: 'deepseek' }]
     : [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }, { id: 'deepseek-v4-pro', ownedBy: 'deepseek' }] }
 }
 const loadUsage = async (options) => {
-  const events = ['deepseek', 'stepfun', 'tokener'].flatMap((provider, index) => [
+  const events = ['deepseek', 'stepfun'].flatMap((provider, index) => [
     { type: 'step/start', seq: index * 2, time: Date.now(), data: { turn: index + 1, step: 0 } },
     { type: 'assistant/message', seq: index * 2 + 1, time: Date.now(), data: { turn: index + 1, step: 0,
-      message: { source: { provider, model: provider === 'deepseek' ? 'deepseek-v4-flash' : provider === 'stepfun' ? 'step-3.5-flash' : 'water18-0910' } },
+      message: { source: { provider, model: provider === 'deepseek' ? 'deepseek-v4-flash' : 'step-3.5-flash' } },
       usage: { inputTokens: 10000, outputTokens: 5000, cacheReadTokens: 2000, cacheWriteTokens: 1000 } } },
   ])
   return { ok: true, scope: 'all', fetchedAt, source: 'live', ...aggregateBilling([{ sessionId: 'sample', title: '示例会话 / Sample', header: {}, events }], options) }
@@ -51,8 +49,7 @@ const loadUsage = async (options) => {
 const choices = [
   { provider: 'deepseek', model: 'deepseek-v4-flash' },
   { provider: 'StepFun', model: 'step-3.5-flash' },
-  { provider: 'Tokener', model: 'water18-0910' },
-  { provider: 'Tokener', model: 'deepseek-v4-flash' },
+  { provider: 'StepFun', model: 'step-3.7-flash' },
   { provider: 'Other', model: 'custom-model' },
 ]
 let snapshot = { current: choices[0], status: 'ready' }
