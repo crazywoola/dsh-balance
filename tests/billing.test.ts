@@ -161,3 +161,16 @@ describe('provider and model switching', () => {
     expect(requestsBySession.get('a')).toHaveLength(1)
   })
 })
+
+it('groups official and legacy DeepSeek routes together without assigning an unverified model price', () => {
+  const events = [requestHeader(0, '2026-08-17T00:00:00Z', 'deepseek'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5 }),
+    stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'deepseek-official'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2),
+    stepStart(6, 3), requestHeader(7, '2026-08-17T00:00:10Z', 'DEEPSEEK-OFFICIAL', 'deepseek-flash'), assistant(8, { inputTokens: 3, outputTokens: 4 }, 3)]
+  const source = { sessionId: 'a', title: 'A', header, events }
+  const legacy = aggregateBilling([source], { ...utcOptions, provider: 'deepseek' })
+  const official = aggregateBilling([source], { ...utcOptions, provider: 'deepseek-official' })
+  expect(official.summary).toEqual(legacy.summary)
+  expect(official.summary.byModel).toHaveLength(2)
+  expect(official.summary.totals).toMatchObject({ requests: 3, pricedRequests: 2, unpricedRequests: 1 })
+  expect(official.requestsBySession.get('a')?.[2]).toMatchObject({ provider: 'deepseek', model: 'deepseek-flash', costUsd: null, unknownReason: 'unknown-model' })
+})

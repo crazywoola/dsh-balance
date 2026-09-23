@@ -131,3 +131,33 @@ describe('provider models route', () => {
     expect(JSON.stringify([result, warn.mock.calls])).not.toContain('private-secret')
   })
 })
+
+describe('official DeepSeek provider ID', () => {
+  it.each(['/dsh-balance/api/balance', '/dsh-balance/api/models'])('shares credentials and cache across aliases on %s', async (route) => {
+    const payload = route.endsWith('/balance') ? deepseek : { object: 'list', data: [{ object: 'model', id: 'deepseek-flash', owned_by: 'deepseek' }] }
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(payload))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({}, route)
+    expect(await request('?provider=deepseek-official')).toMatchObject({ status: 200, body: { provider: 'deepseek', source: 'live' } })
+    expect(resolve).toHaveBeenCalledWith('DEEPSEEK_API_KEY')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(`https://api.deepseek.com/${route.endsWith('/balance') ? 'user/balance' : 'models'}`)
+    for (const provider of ['deepseek', 'DEEPSEEK-OFFICIAL', ' deepseek-official ']) {
+      expect((await request(`?provider=${encodeURIComponent(provider)}`)).body).toMatchObject({ provider: 'deepseek', source: 'cache' })
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect((await request('?provider=deepseek-official&refresh=1')).body.source).toBe('live')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect((await request('?provider=deepseek-proxy')).body.code).toBe('UNSUPPORTED_PROVIDER')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('accepts official ID overrides and prevents ambiguous duplicate configuration', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(deepseek))
+    vi.stubGlobal('fetch', fetchImpl)
+    const { request, resolve } = setup({ providers: [{ id: 'DEEPSEEK-OFFICIAL', apiKeyRef: 'OFFICIAL_KEY', baseUrl: 'http://localhost:3091' }] })
+    expect((await request('?provider=deepseek')).status).toBe(200)
+    expect(resolve).toHaveBeenCalledWith('OFFICIAL_KEY')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('http://localhost:3091/user/balance')
+    expect(() => setup({ providers: [{ id: 'deepseek' }, { id: 'deepseek-official' }] })).toThrow('duplicate')
+  })
+})

@@ -47,6 +47,7 @@ const loadUsage = async (options) => {
   return { ok: true, scope: 'all', fetchedAt, source: 'live', ...aggregateBilling([{ sessionId: 'sample', title: '示例会话 / Sample', header: {}, events }], options) }
 }
 const choices = [
+  { provider: 'deepseek-official', model: 'deepseek-flash' },
   { provider: 'deepseek', model: 'deepseek-v4-flash' },
   { provider: 'StepFun', model: 'step-3.5-flash' },
   { provider: 'StepFun', model: 'step-3.7-flash' },

@@ -126,3 +126,17 @@ it('filters statistics by provider, cancels refreshes on changes, and includes c
   await act(async () => { refresh.resolve(usage(999)) })
   expect(root.root.findAllByType('strong').map(node => node.children.join(''))).toContain('190')
 })
+
+it('queries the official DeepSeek account while preserving the selected deepseek-flash model', async () => {
+  const loadBalance = vi.fn<BalanceDockInjected['loadBalance']>().mockResolvedValue(balance('12'))
+  let root!: ReactTestRenderer
+  await act(async () => {
+    root = create(createElement(BalanceDock, dockProps(directory('deepseek-official', 'deepseek-flash'), loadBalance)))
+    roots.push(root)
+  })
+  expect(loadBalance).toHaveBeenCalledWith(false, expect.any(AbortSignal), 'deepseek')
+  expect(JSON.stringify(root.toJSON())).toContain('DeepSeek Balance')
+  expect(JSON.stringify(root.toJSON())).toContain('deepseek-flash')
+  expect(JSON.stringify(root.toJSON())).toContain('$12.00')
+  expect(JSON.stringify(root.toJSON())).not.toContain('not supported')
+})
