@@ -22,24 +22,17 @@ export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSee
   return (
     <div className="dsh-deepseek-panel">
       <header className="dsh-ledger-header">
-        <div className="dsh-ledger-eyebrow"><span>DSH / {t('panel.ledger')}</span><span>{t('panel.private')}</span></div>
-        <div className="dsh-ledger-intro">
-          <div><h1>{t('panel.title')}</h1><p>{t('panel.copy')}</p></div>
-          <div className="dsh-ledger-orbit" aria-hidden="true"><i /><i /><i /><span>↗</span></div>
-        </div>
+        <h1>{t('panel.title')}</h1><p className="dsh-balance-copy">{t('panel.copy')}</p>
       </header>
       <div className="dsh-provider-switch" role="group" aria-label={t('panel.providers')}>
-        {BALANCE_PROVIDERS.map((item, index) => (
-          <button key={item.id} type="button" aria-pressed={provider === item.id} onClick={() => setProvider(item.id)}>
-            <span className="dsh-provider-index">0{index + 1}</span>
-            <span>{item.name}</span><span className="dsh-provider-arrow" aria-hidden="true">↗</span>
-          </button>
+        {BALANCE_PROVIDERS.map(item => (
+          <button key={item.id} type="button" aria-pressed={provider === item.id} onClick={() => setProvider(item.id)}>{item.name}</button>
         ))}
       </div>
       <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
-      <div className="dsh-ledger-section-label"><span>02 / {t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
+      <div className="dsh-ledger-section-label"><span>{t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
       <ModelsSection key={`models-${provider}`} provider={provider} loadModels={loadModels} t={t} />
-      <div className="dsh-ledger-section-label"><span>03 / {t('panel.activity')}</span></div>
+      <div className="dsh-ledger-section-label"><span>{t('panel.activity')}</span></div>
       <BillingOverview provider={provider} loadUsage={loadUsage} t={t} />
     </div>
   )

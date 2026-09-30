@@ -4,7 +4,7 @@
 
 DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供方的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
-设置页采用账户总览布局，支持 DeepSeek / StepFun 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
+界面使用 Harness 原生侧栏、主页面和主题变量。侧栏“插件”下方新增“用量统计”，独立查看所有对话的提供方、模型、会话和日期统计；默认显示全部提供方与全部时间，支持提供方和日期范围筛选。活动打卡图按浏览器时区的星期 × 24 小时汇总请求次数，圆点大小随次数变化；悬停或使用方向键可查看请求数与 token 明细。选择器采用主题化浮层菜单，支持方向键、Home/End、Enter、Escape 和按名称检索。设置页支持 DeepSeek / StepFun 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
 
 聊天框底部会跟随当前会话所选的提供方与模型更新余额；设置页可独立切换提供方。
 
@@ -18,15 +18,17 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 - 在设置页按所选 provider、模型、会话和日期查看实际 usage 消费，并在当前会话的“消费”Tab 查看请求明细
 - 缺少 provider usage、未知 provider 或未知模型时标记为“未计费”，不进行 token 估算
 - 日期按浏览器 IANA 时区分组；DeepSeek 峰谷价格始终按北京时间计算
-- 默认显示 USD；配置 `usdToCny` 后额外显示固定汇率换算的 CNY
+- DeepSeek 费用显示 USD、StepFun 显示原生 CNY；配置 `usdToCny` 后显示人民币合计
 - 缓存查询结果并支持手动刷新
 - 依据 DeepSeek 峰谷定价，在高峰时段（北京时间 9:00–12:00、14:00–18:00）将聊天框下方的余额指示灯变为橙色
 - 原生支持简体中文和英文，并跟随 Harness 系统语言切换
 - 支持 Harness 已保存的 `DEEPSEEK_API_KEY`
 
+![会话消费页示例](./docs/dsh-session-usage-v0100.jpg)
+
 ## 兼容性
 
-0.9.0 适配 DeepSeek Harness **0.2.0-rc.2**（[上游提交 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)），需要 Node.js **22.19+（22.x）或 24+**。本次源码不再兼容 Harness 0.1 的接口。
+0.10.0 适配 DeepSeek Harness **0.2.0-rc.2**（[上游提交 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)），需要 Node.js **22.19+（22.x）或 24+**。本次源码不再兼容 Harness 0.1 的接口。
 
 也可在本地构建并打包源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
 
@@ -35,7 +37,7 @@ pnpm install --frozen-lockfile
 pnpm pack
 ```
 
-消费统计通过新版只读会话句柄读取，以 `inheritedEventCount` 排除分叉继承的记录；会话页在 token 用量变化或一轮运行结束后刷新。
+消费统计通过新版只读会话句柄读取，以 `inheritedEventCount` 排除分叉继承的记录；会话页在 token 用量变化或一轮运行结束后刷新；统计页面每 15 秒检查更新，重新聚焦或返回页面时刷新，隐藏页面暂停查询。兼容 `assistant/message` 和重试/取消请求的 `assistant/attempt`，读取最后一条 stream usage，并以重试边界区分独立请求，同一次请求的重复结算仅计一次。
 
 ## 安装
 
@@ -77,13 +79,15 @@ providers:
 
 每条请求按实际返回消息的 provider / model 归属，兼容旧日志的请求头；日期和峰谷价格按该次请求时间计算。Token 总量包括未缓存输入、输出、缓存读取与缓存写入。设置页默认筛选所选 provider，也可选择“全部提供方”；会话页保留混用模型的完整历史。
 
-当前内置价格仅覆盖 DeepSeek 官方定价。StepFun 等没有可靠历史价格的数据保留请求数与 token，显示“未计费”；不会套用同名 DeepSeek 模型价格，也不会将全部未知费用显示为 $0。混合统计仅累加已知价格，并注明不完整。账户余额是实时查询值，与本地用量估算独立。
+内置 DeepSeek 美元定价，以及 2026-09-30 核验的 [StepFun 官方人民币标准价](https://platform.stepfun.com/docs/zh/guides/pricing/details)：`step-5-preview`、`step-3.7-flash`、`step-3.5-flash` 和 `step-3.5-flash-2603`。StepFun 未缓存输入（含缓存写入）、缓存读取、输出分别计价，不套用 DeepSeek 峰谷倍率。费用是公开标准价估算，不代表账户实际账单；套餐、折扣和未保存的历史调价不包含在内。
+
+美元和原生人民币费用分别展示；设置 `usdToCny` 后，人民币合计才会包含美元折算金额。未知 provider / model 和缺失 usage 的请求保留请求数与 token，显示“未计费”；混合统计注明费用不完整。账户余额是实时查询值，与本地用量估算独立。会话消费页采用居中内容宽度、响应式外边距，并为底部输入框保留空间。
 
 ## 扩展与设计
 
 - `src/providers.ts` 保存可在前后端共享的 provider 元数据；`src/balance.ts` 的 adapter 表只负责端点与响应解析，传输、错误分类和缓存由公共逻辑处理。
 - `GET /dsh-balance/api/balance?provider=StepFun` 查询 StepFun；省略 provider 保持 DeepSeek 兼容，`refresh=1` 绕过对应缓存。不支持的 provider 返回 `UNSUPPORTED_PROVIDER`。
-- 排版参考 [Codrops 的 Kononenko 案例](https://tympanus.net/codrops/2026/09/18/kononenko-architectural-bureau/)：大字号、留白、建筑式网格和几何线条，使用原创 CSS 实现；支持深浅色主题、窄屏与减少动态效果偏好。
+- 通过原生 `sidebar.panellist` 与 `main` 插槽接入侧栏和主页面，菜单、选中态、侧栏折叠和页面导航由 Harness 管理；插件使用 Harness 的颜色、圆角和布局变量，支持深浅色主题与窄屏。
 
 ## 开发
 
@@ -93,7 +97,7 @@ pnpm check
 pnpm preview
 ```
 
-预览不使用真实密钥。可使用 `?lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。实时模型余额和统计修复自 `0.7.0` 起提供。
+预览不使用真实密钥。可使用 `?page=session` 检查会话消费页（124 次 StepFun 请求、7,161,128 tokens），使用 `?page=usage` 查看独立统计页，使用 `?page=usage&lang=en&theme=dark` 检查英文与深色主题，`?state=missing` / `error` / `empty` / `loading` 检查不同状态。顶部示例模型选择器可验证底部 provider / 模型切换。StepFun 余额与模型查询、新版账户页面自 `0.6.0` 起提供。实时模型余额和统计修复自 `0.7.0` 起提供。
 
 ## License
 

@@ -67,6 +67,10 @@ describe('usage Host route', () => {
     expect(open).toHaveBeenLastCalledWith(session.header.id, 'read')
     expect(close).toHaveBeenCalledTimes(2)
     expect(list).toHaveBeenCalledTimes(3)
+    const fourth = response()
+    await handler(request('/dsh-balance/api/usage?scope=session&sessionId=live-session&timeZone=UTC'), fourth.result)
+    expect(fourth.value()).toMatchObject({ ok: true, scope: 'session', source: 'cache' })
+    expect(open).toHaveBeenCalledTimes(2)
   })
 
   it('excludes the inherited event prefix reported by the storage handle', async () => {

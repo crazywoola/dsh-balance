@@ -18,7 +18,7 @@ The composer readout follows the current session’s provider and model. The Set
 - View actual usage costs by selected provider, model, session, and day in Settings, plus request details in the current session's Usage tab
 - Mark missing usage, unknown providers, and unknown models as unpriced without estimating tokens
 - Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time
-- Show USD by default, with optional fixed-rate CNY conversion through `usdToCny`
+- Show native USD and CNY costs separately; `usdToCny` enables a combined CNY total
 - Cache query results with manual refresh support
 - Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00, 14:00–18:00 Beijing time)
 - Native Simplified Chinese and English that follows the Harness system language
@@ -26,7 +26,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Version 0.9.0 targets DeepSeek Harness **0.2.0-rc.2** ([upstream commit 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)). Use Node.js **22.19+ (22.x) or 24+**. Harness 0.1 APIs are no longer supported by this checkout.
+Version 0.10.0 targets DeepSeek Harness **0.2.0-rc.2** ([upstream commit 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)). Use Node.js **22.19+ (22.x) or 24+**. Harness 0.1 APIs are no longer supported by this checkout.
 
 To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 
@@ -77,7 +77,7 @@ Model lists use the [StepFun list API](https://platform.stepfun.com/docs/zh/api-
 
 Each request is attributed to its actual message source, with request headers as a fallback for older logs. Request time determines date grouping and peak pricing. Token totals include uncached input, output, cache reads, and cache writes. Settings defaults to the selected provider, with an All providers option; the session view keeps mixed-provider history.
 
-Built-in prices currently cover official DeepSeek pricing only. StepFun and other requests without reliable historical pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
+Built-in estimates cover official DeepSeek USD rates and verified StepFun mainland CNY reference rates. Requests without supported pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
 
 ## Extension and design
 
@@ -100,3 +100,19 @@ The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark
 [MIT](./LICENSE)
 
 <a href="https://www.buymeacoffee.com/pinkbanana"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Crazywoola a coffee" width="199" height="55" /></a>
+
+## Native usage page
+
+A **Usage Statistics** entry below **Plugins** in the native sidebar opens a standalone page. It defaults to all providers and all time, with provider/date-range filters and breakdowns by provider, model, session, and day. Native `sidebar.panellist` and `main` slots keep navigation, collapsed sidebar behavior, and active styling consistent with Harness. Plugin surfaces use Harness theme colors and radii.
+
+Usage includes completed messages and failed, retried, or cancelled attempts with a reported stream usage sample. The final sample wins within an attempt; retry boundaries count separate calls. Inherited fork events are excluded. Open statistics refresh every 15 seconds and on focus/visibility return, without polling hidden pages. Manual refresh also populates the normal revision cache. Unknown prices remain unpriced.
+
+Run `pnpm preview` and open `?page=usage` (or `?page=usage&lang=en&theme=dark`) to inspect the fixture page.
+
+The activity punchcard groups requests by weekday and hour in the selected browser timezone. Dot area tracks request counts and follows provider/date filters, including DST repeated hours. Hover or use arrow keys for request/token details. Filters use themed, portaled listboxes with keyboard navigation, selection checks, Escape/outside-click dismissal, and typeahead.
+
+### v0.10.0 usage accounting
+
+The conversation usage view has centered content, responsive padding and space for the composer. Cache input is counted once; duplicate settlements replace the previous sample, retries remain separate, and fork prefixes are excluded.
+
+StepFun mainland API estimates use [official standard CNY rates](https://platform.stepfun.com/docs/zh/guides/pricing/details), verified on 2026-09-30, for `step-5-preview`, `step-3.7-flash`, `step-3.5-flash` and `step-3.5-flash-2603`. These reference estimates do not account for plans, discounts or unrecorded historical rate changes. USD and native CNY are shown separately; only an explicitly configured `usdToCny` rate enables a combined CNY total. Unknown rates remain unpriced. `?page=session` previews the conversation view with 124 StepFun requests.

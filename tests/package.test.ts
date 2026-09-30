@@ -18,11 +18,15 @@ describe('published package metadata', () => {
     expect(cordisPatch).not.toMatch(/^\s+name: dsh-balance$/m)
   })
 
-  it('uses standalone Settings and composer-dock surfaces', () => {
+  it('uses native sidebar, main, Settings, and composer-dock surfaces', () => {
     expect(packageJson.dsh?.client?.inject).toContain('@deepseek-ai/dsh-client-ui-conversation')
     expect(packageJson.dsh?.client?.inject).not.toContain('@deepseek-ai/dsh-client-ui-settings-plugins')
     expect(packageJson.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-conversation')
     expect(packageJson.peerDependencies).not.toHaveProperty('@deepseek-ai/dsh-client-ui-settings-plugins')
+    expect(packageJson.dsh?.client?.inject).toContain('@deepseek-ai/dsh-client-ui-layout')
+    expect(packageJson.dsh?.client?.inject).toContain('@deepseek-ai/dsh-client-ui-sidebar')
+    expect(clientSource).toContain("ctx.slots.inject('main'")
+    expect(clientSource).toContain("ctx.slots.inject('sidebar.panellist'")
     expect(clientSource).toContain("ctx.slots.inject('settings.section'")
     expect(clientSource).toContain("ctx.slots.inject('conversation.composer.dock'")
     expect(clientSource).not.toContain('settings.plugins.tab')

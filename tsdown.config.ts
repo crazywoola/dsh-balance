@@ -5,6 +5,7 @@ const packageName = '@pinkbanana/dsh-balance'
 const clientExternals = [
   'react',
   'react/jsx-runtime',
+  'react-dom',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
 ]

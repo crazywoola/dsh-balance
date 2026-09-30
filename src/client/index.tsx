@@ -1,5 +1,8 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { UsagePage, UsagePanelIcon } from './UsagePage.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -19,6 +22,7 @@ import type { UsageLoadOptions, UsageTabInjected } from './BillingTab.tsx'
 import { en, LOCALE_NS, zh } from './locales.ts'
 import { balanceStyles } from './styles.ts'
 
+export type { UsagePageProps } from './UsagePage.tsx'
 export type { BalanceTabInjected, BalanceTabProps } from './BalanceTab.tsx'
 export type { BalanceDockInjected, BalanceDockProps } from './BalanceDock.tsx'
 export type { DeepSeekPanelInjected, DeepSeekPanelProps } from './DeepSeekPanel.tsx'
@@ -84,7 +88,7 @@ async function loadUsage(options: UsageLoadOptions, signal: AbortSignal): Promis
   return value as UsageApiResponse
 }
 
-/** Register a standalone Settings page and an ambient composer balance readout. */
+/** Register native navigation, settings, and conversation surfaces. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => ctx.locale.register(LOCALE_NS, { zh, en }),
@@ -100,6 +104,21 @@ export function apply(ctx: ClientContext): void {
     document.head.append(style)
     return () => { style.remove() }
   }, 'dsh-balance: styles')
+
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main',
+    key: 'dsh-usage',
+    locale: LOCALE_NS,
+    inject: (): UsageTabInjected => ({ loadUsage }),
+  }, UsagePage))
+
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist',
+    id: 'dsh-usage',
+    order: 10,
+    label: () => t('nav.usage'),
+    locale: LOCALE_NS,
+  }, UsagePanelIcon))
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',

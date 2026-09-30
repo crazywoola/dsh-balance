@@ -6,15 +6,19 @@ export const USAGE_ROUTE = '/dsh-balance/api/usage'
 export const BILLING_PRICING_VERSION = 'deepseek-v4-2026-08-17'
 const TOKENS_PER_MILLION = 1_000_000
 
-export interface BillingPrice {
+interface BillingPriceIdentity {
   provider: string
   model: string
   effectiveFrom: string
   pricingVersion: string
-  cacheHitUsdPerMillion: number
-  cacheMissUsdPerMillion: number
-  outputUsdPerMillion: number
 }
+
+export type BillingPrice = BillingPriceIdentity & (PriceRates & { currency?: 'USD' } | {
+  currency: 'CNY'
+  cacheHitCnyPerMillion: number
+  cacheMissCnyPerMillion: number
+  outputCnyPerMillion: number
+})
 
 interface PriceRates {
   cacheHitUsdPerMillion: number
@@ -32,6 +36,16 @@ const LEGACY_PRICES: Record<string, PriceRates> = {
   'deepseek-reasoner': { cacheHitUsdPerMillion: 0.14, cacheMissUsdPerMillion: 0.55, outputUsdPerMillion: 2.19 },
 }
 
+/** Standard mainland API rates, verified against StepFun's official pricing on 2026-09-30.
+ * These are reference estimates; account discounts and historical price changes are not known.
+ */
+const STEPFUN_PRICES: Record<string, { cacheHitCnyPerMillion: number; cacheMissCnyPerMillion: number; outputCnyPerMillion: number }> = {
+  'step-5-preview': { cacheHitCnyPerMillion: 0.35, cacheMissCnyPerMillion: 7, outputCnyPerMillion: 20 },
+  'step-3.7-flash': { cacheHitCnyPerMillion: 0.27, cacheMissCnyPerMillion: 1.35, outputCnyPerMillion: 8.1 },
+  'step-3.5-flash': { cacheHitCnyPerMillion: 0.14, cacheMissCnyPerMillion: 0.7, outputCnyPerMillion: 2.1 },
+  'step-3.5-flash-2603': { cacheHitCnyPerMillion: 0.14, cacheMissCnyPerMillion: 0.7, outputCnyPerMillion: 2.1 },
+}
+
 export const BILLING_PRICES: readonly BillingPrice[] = [
   ...Object.entries(LEGACY_PRICES).map(([model, rates]) => ({
     provider: 'deepseek',
@@ -47,6 +61,10 @@ export const BILLING_PRICES: readonly BillingPrice[] = [
     pricingVersion: BILLING_PRICING_VERSION,
     ...rates,
   })),
+  ...Object.entries(STEPFUN_PRICES).map(([model, rates]) => ({
+    provider: 'stepfun', model, currency: 'CNY' as const,
+    effectiveFrom: new Date(0).toISOString(), pricingVersion: 'stepfun-reference-2026-09-30', ...rates,
+  })),
 ]
 
 export interface BillingUsage {
@@ -60,6 +78,8 @@ export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unkno
 
 export interface UsageRequestRecord {
   sessionId: string
+  /** Durable settlement sequence, also distinguishes retries within one step. */
+  seq: number
   turn: number
   step: number
   time: string
@@ -71,6 +91,8 @@ export interface UsageRequestRecord {
   cacheReadTokens: number
   cacheWriteTokens: number
   costUsd: number | null
+  /** Native CNY estimate; kept separate from USD without inventing an exchange rate. */
+  costCny?: number
   pricingVersion?: string
   unknownReason?: BillingUnknownReason
 }
@@ -85,6 +107,12 @@ export interface UsageTotals {
   cacheWriteTokens: number
   costUsd: number
   costCny: number | null
+  nativeCostCny: number
+  cnyPricedRequests: number
+}
+
+export interface UsageProviderAggregate extends UsageTotals {
+  provider: string
 }
 
 export interface UsageModelAggregate extends UsageTotals {
@@ -96,6 +124,12 @@ export interface UsageDayAggregate extends UsageTotals {
   date: string
 }
 
+export interface UsageHourAggregate extends UsageTotals {
+  /** Sunday = 0, Saturday = 6, in the requested timezone. */
+  weekday: number
+  hour: number
+}
+
 export interface UsageSessionAggregate extends UsageTotals {
   sessionId: string
   title: string
@@ -105,8 +139,10 @@ export interface UsageSummary {
   timeZone: string
   usdToCny: number | null
   totals: UsageTotals
+  byProvider: UsageProviderAggregate[]
   byModel: UsageModelAggregate[]
   byDay: UsageDayAggregate[]
+  byWeekdayHour: UsageHourAggregate[]
   bySession: UsageSessionAggregate[]
 }
 
@@ -161,6 +197,8 @@ interface MutableTotals {
   cacheReadTokens: number
   cacheWriteTokens: number
   costUsd: number
+  nativeCostCny: number
+  cnyPricedRequests: number
 }
 
 interface SessionRecords {
@@ -178,15 +216,21 @@ function emptyTotals(): MutableTotals {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     costUsd: 0,
+    nativeCostCny: 0,
+    cnyPricedRequests: 0,
   }
 }
 
 function addTotals(target: MutableTotals, record: UsageRequestRecord): void {
   target.requests += 1
-  if (record.costUsd === null) target.unpricedRequests += 1
+  if (record.costUsd === null && record.costCny === undefined) target.unpricedRequests += 1
   else {
     target.pricedRequests += 1
-    target.costUsd += record.costUsd
+    target.costUsd += record.costUsd ?? 0
+    if (record.costCny !== undefined) {
+      target.cnyPricedRequests += 1
+      target.nativeCostCny += record.costCny
+    }
   }
   target.inputTokens += record.inputTokens
   target.outputTokens += record.outputTokens
@@ -196,10 +240,12 @@ function addTotals(target: MutableTotals, record: UsageRequestRecord): void {
 
 function toTotals(value: MutableTotals, usdToCny: number | null): UsageTotals {
   const costUsd = roundMoney(value.costUsd)
+  const nativeCostCny = roundMoney(value.nativeCostCny)
   return {
     ...value,
     costUsd,
-    costCny: usdToCny === null ? null : roundMoney(costUsd * usdToCny),
+    nativeCostCny,
+    costCny: usdToCny === null && value.cnyPricedRequests === 0 ? null : roundMoney(nativeCostCny + costUsd * (usdToCny ?? 0)),
   }
 }
 
@@ -246,6 +292,7 @@ function messageMetadata(event: SessionEvent): { provider: string; model: string
 
 /** Resolve the versioned price for one request. */
 export function resolveBillingPrice(provider: string, model: string, time: number): BillingPrice | undefined {
+  if (findBalanceProvider(provider)?.id === 'stepfun') return BILLING_PRICES.find(price => price.provider === 'stepfun' && price.model === model)
   if (findBalanceProvider(provider)?.id !== 'deepseek') return undefined
   const canonicalModel = model === 'deepseek-chat' || model === 'deepseek-reasoner'
     ? (time >= PEAK_EFFECTIVE_FROM ? 'deepseek-v4-flash' : model)
@@ -263,14 +310,17 @@ export function resolveBillingPrice(provider: string, model: string, time: numbe
   }
 }
 
-/** Compute one request charge. Cache writes are billed as cache misses. */
+/** Compute one request charge in the price's native currency. Cache writes are cache misses. */
 export function calculateRequestCost(usage: BillingUsage, price: BillingPrice, time: number): number {
   const multiplier = findBalanceProvider(price.provider)?.id === 'deepseek' && isPeakHour(new Date(time)) ? 2 : 1
   const missTokens = usage.inputTokens + usage.cacheWriteTokens
+  const missRate = price.currency === 'CNY' ? price.cacheMissCnyPerMillion : price.cacheMissUsdPerMillion
+  const hitRate = price.currency === 'CNY' ? price.cacheHitCnyPerMillion : price.cacheHitUsdPerMillion
+  const outputRate = price.currency === 'CNY' ? price.outputCnyPerMillion : price.outputUsdPerMillion
   return roundMoney((
-    missTokens * price.cacheMissUsdPerMillion
-    + usage.cacheReadTokens * price.cacheHitUsdPerMillion
-    + usage.outputTokens * price.outputUsdPerMillion
+    missTokens * missRate
+    + usage.cacheReadTokens * hitRate
+    + usage.outputTokens * outputRate
   ) / TOKENS_PER_MILLION * multiplier)
 }
 
@@ -302,6 +352,7 @@ export function extractSessionUsage(
   let latestRequest: RequestContext | undefined
   const requests = new Map<string, { metadata: RequestContext | undefined; time: number }>()
   let activeStep: string | undefined
+  let replacement: { key: string; index: number } | undefined
   const records: UsageRequestRecord[] = []
 
   for (const event of events) {
@@ -310,13 +361,14 @@ export function extractSessionUsage(
       // Harness writes changed headers after step/start, including retry changes.
       if (activeStep !== undefined) requests.set(activeStep, { metadata: latestRequest, time: event.time })
     }
-    if (event.type === 'step/start') {
+    if (event.type === 'step/start' || event.type === 'llm/retry-started') {
+      replacement = undefined
       activeStep = stepKey(event.data.turn, event.data.step)
       requests.set(activeStep, { metadata: latestRequest, time: event.time })
       continue
     }
-    if (event.type === 'step/end') activeStep = undefined
-    if (event.type !== 'assistant/message' || event.seq < inheritedEventCount) continue
+    if (event.type === 'step/end') { activeStep = undefined; replacement = undefined }
+    if ((event.type !== 'assistant/message' && event.type !== 'assistant/attempt') || event.seq < inheritedEventCount) continue
 
     const request = requests.get(stepKey(event.data.turn, event.data.step))
     // The completed message records the actual call, even if selection changed in flight.
@@ -324,15 +376,19 @@ export function extractSessionUsage(
     const provider = metadata === undefined ? null : (findBalanceProvider(metadata.provider)?.id ?? metadata.provider)
     const model = metadata?.model ?? null
     const time = request?.time ?? event.time
-    if (options.provider !== undefined && provider !== (findBalanceProvider(options.provider)?.id ?? options.provider)) continue
-    if (!inDateRange(time, options.timeZone, options.from, options.to)) continue
 
-    const usage = readUsage(event.data.usage)
+    // Match Harness: direct usage takes precedence; otherwise the last stream sample wins.
+    const sample = event.data.stream?.slice().reverse().find(item => item.type === 'chunk' && item.chunk.type === 'usage')
+    const streamUsage = sample?.type === 'chunk' && sample.chunk.type === 'usage' ? sample.chunk.usage : undefined
+    const key = stepKey(event.data.turn, event.data.step)
+    const previousUsage = replacement?.key === key ? records[replacement.index]?.usage : undefined
+    const usage = readUsage(event.type === 'assistant/message' ? event.data.usage ?? streamUsage : streamUsage) ?? previousUsage
     const inputTokens = usage?.inputTokens ?? 0
     const outputTokens = usage?.outputTokens ?? 0
     const cacheReadTokens = usage?.cacheReadTokens ?? 0
     const cacheWriteTokens = usage?.cacheWriteTokens ?? 0
     let costUsd: number | null = null
+    let costCny: number | undefined
     let pricingVersion: string | undefined
     let unknownReason: BillingUnknownReason | undefined
     if (usage === undefined) unknownReason = 'missing-usage'
@@ -341,13 +397,16 @@ export function extractSessionUsage(
       const price = resolveBillingPrice(provider, model, time)
       if (price === undefined) unknownReason = findBalanceProvider(provider) !== undefined ? 'unknown-model' : 'unknown-provider'
       else {
-        costUsd = calculateRequestCost(usage, price, time)
+        const cost = calculateRequestCost(usage, price, time)
+        if (price.currency === 'CNY') costCny = cost
+        else costUsd = cost
         pricingVersion = price.pricingVersion
       }
     }
 
     const record: UsageRequestRecord = {
       sessionId,
+      seq: event.seq,
       turn: event.data.turn,
       step: event.data.step,
       time: new Date(time).toISOString(),
@@ -359,13 +418,23 @@ export function extractSessionUsage(
       cacheReadTokens,
       cacheWriteTokens,
       costUsd,
+      ...(costCny === undefined ? {} : { costCny }),
       ...(pricingVersion === undefined ? {} : { pricingVersion }),
       ...(unknownReason === undefined ? {} : { unknownReason }),
     }
-    records.push(record)
+    // Multiple settlements of one attempt replace its previous sample. A retry
+    // boundary clears this slot so a distinct model call is counted separately.
+    if (replacement?.key === key) records[replacement.index] = record
+    else {
+      records.push(record)
+      replacement = { key, index: records.length - 1 }
+    }
   }
 
-  return records
+  return records.filter(record =>
+    (options.provider === undefined || record.provider === (findBalanceProvider(options.provider)?.id ?? options.provider))
+    && inDateRange(Date.parse(record.time), options.timeZone, options.from, options.to),
+  )
 }
 
 function aggregateRecords(
@@ -375,18 +444,33 @@ function aggregateRecords(
   usdToCny: number | null,
 ): { summary: UsageSummary; sessionRecords: SessionRecords[] } {
   const totals = emptyTotals()
+  const providers = new Map<string, MutableTotals & { provider: string }>()
   const models = new Map<string, MutableTotals & { provider: string; model: string }>()
+  const hours = new Map<string, MutableTotals & { weekday: number; hour: number }>()
+  const clock = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: '2-digit', hourCycle: 'h23' })
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const days = new Map<string, MutableTotals & { date: string }>()
   const sessions = new Map<string, MutableTotals & { sessionId: string; title: string }>()
 
   for (const record of records) {
     addTotals(totals, record)
     const provider = record.provider ?? 'unknown'
+    const providerTotal = providers.get(provider) ?? { ...emptyTotals(), provider }
+    addTotals(providerTotal, record)
+    providers.set(provider, providerTotal)
     const model = record.model ?? 'unknown'
     const modelKey = JSON.stringify([provider, model])
     const modelTotal = models.get(modelKey) ?? { ...emptyTotals(), provider, model }
     addTotals(modelTotal, record)
     models.set(modelKey, modelTotal)
+
+    const parts = clock.formatToParts(new Date(record.time))
+    const weekday = weekdays.indexOf(parts.find(part => part.type === 'weekday')!.value)
+    const hour = Number(parts.find(part => part.type === 'hour')!.value)
+    const hourKey = `${weekday}:${hour}`
+    const hourTotal = hours.get(hourKey) ?? { ...emptyTotals(), weekday, hour }
+    addTotals(hourTotal, record)
+    hours.set(hourKey, hourTotal)
 
     const day = dateKey(Date.parse(record.time), timeZone)
     const dayTotal = days.get(day) ?? { ...emptyTotals(), date: day }
@@ -402,42 +486,22 @@ function aggregateRecords(
     sessions.set(record.sessionId, sessionTotal)
   }
 
-  const toAggregate = <T extends MutableTotals>(value: T): UsageTotals & Omit<T, keyof MutableTotals> => {
-    const { requests, pricedRequests, unpricedRequests, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd } = value
-    const totals = {
-      requests,
-      pricedRequests,
-      unpricedRequests,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      costUsd: roundMoney(costUsd),
-      costCny: usdToCny === null ? null : roundMoney(costUsd * usdToCny),
-    }
-    const extras = value as T & Partial<{
-      provider: string
-      model: string
-      date: string
-      sessionId: string
-      title: string
-    }>
-    if (extras.provider !== undefined && extras.model !== undefined) return { ...totals, provider: extras.provider, model: extras.model } as unknown as UsageTotals & Omit<T, keyof MutableTotals>
-    if (extras.date !== undefined) return { ...totals, date: extras.date } as unknown as UsageTotals & Omit<T, keyof MutableTotals>
-    return { ...totals, sessionId: extras.sessionId ?? '', title: extras.title ?? '' } as unknown as UsageTotals & Omit<T, keyof MutableTotals>
-  }
+  const toAggregate = <T extends MutableTotals>(value: T) => ({ ...value, ...toTotals(value, usdToCny) })
 
   const summary: UsageSummary = {
     timeZone,
     usdToCny,
     totals: toTotals(totals, usdToCny),
+    byProvider: [...providers.values()].map(toAggregate),
     byModel: [...models.values()].map(value => ({ ...toAggregate(value), provider: value.provider, model: value.model })),
+    byWeekdayHour: [...hours.values()].map(toAggregate).sort((a, b) => a.weekday - b.weekday || a.hour - b.hour),
     byDay: [...days.values()].map(value => ({ ...toAggregate(value), date: value.date })),
     bySession: [...sessions.values()].map(value => ({ ...toAggregate(value), sessionId: value.sessionId, title: value.title })),
   }
-  summary.byModel.sort((a, b) => b.costUsd - a.costUsd || `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`))
+  summary.byProvider.sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider))
+  summary.byModel.sort((a, b) => b.requests - a.requests || `${a.provider}/${a.model}`.localeCompare(`${b.provider}/${b.model}`))
   summary.byDay.sort((a, b) => b.date.localeCompare(a.date))
-  summary.bySession.sort((a, b) => b.costUsd - a.costUsd || a.title.localeCompare(b.title))
+  summary.bySession.sort((a, b) => b.requests - a.requests || a.title.localeCompare(b.title))
 
   const sessionRecords = [...sessions.keys()].map(sessionId => ({
     session: summary.bySession.find(item => item.sessionId === sessionId) ?? {

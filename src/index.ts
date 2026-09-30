@@ -325,7 +325,8 @@ export function apply(ctx: Context, config: Config): void {
         .map(snapshot => `${String(snapshot.header.id)}:${JSON.stringify(snapshot.revision)}`)
         .sort()
         .join('|')
-      const cacheKey = JSON.stringify({ revisionKey, ...query, usdToCny: normalizeUsdToCny(config.usdToCny) })
+      const cacheQuery = { ...query, refresh: false }
+      const cacheKey = JSON.stringify({ revisionKey, ...cacheQuery, usdToCny: normalizeUsdToCny(config.usdToCny) })
       if (!query.refresh && cachedUsage !== undefined && cachedUsage.key === cacheKey && cachedUsage.expiresAt > Date.now()) {
         sendJson(res, 200, { ...cachedUsage.value, source: 'cache' })
         return
@@ -439,8 +440,10 @@ export type {
   UsageAllSuccess,
   UsageApiResponse,
   UsageDayAggregate,
+  UsageHourAggregate,
   UsageFailure,
   UsageModelAggregate,
+  UsageProviderAggregate,
   UsageQuery,
   UsageRequestRecord,
   UsageSessionAggregate,

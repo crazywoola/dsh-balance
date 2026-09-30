@@ -1,3 +1,4 @@
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import type { ReactTestRenderer } from 'react-test-renderer'
@@ -102,8 +103,8 @@ describe('live composer selection', () => {
 })
 
 function usage(inputTokens: number): UsageApiResponse {
-  const totals: UsageTotals = { requests: 1, pricedRequests: 0, unpricedRequests: 1, inputTokens, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 40, costUsd: 0, costCny: null }
-  return { ok: true, scope: 'all', fetchedAt: new Date().toISOString(), source: 'live', summary: { timeZone: 'UTC', usdToCny: null, totals, byDay: [], bySession: [], byModel: [] } }
+  const totals: UsageTotals = { requests: 1, pricedRequests: 0, unpricedRequests: 1, inputTokens, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 40, costUsd: 0, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0 }
+  return { ok: true, scope: 'all', fetchedAt: new Date().toISOString(), source: 'live', summary: { timeZone: 'UTC', usdToCny: null, totals, byWeekdayHour: [], byProvider: [], byDay: [], bySession: [], byModel: [] } }
 }
 
 it('filters statistics by provider, cancels refreshes on changes, and includes cached tokens in the total', async () => {
@@ -120,7 +121,7 @@ it('filters statistics by provider, cancels refreshes on changes, and includes c
   expect(cards).toContain('100') // 10 uncached + 20 output + 30 cache read + 40 cache write
   expect(cards).toContain('Unpriced')
   expect(cards).not.toContain('1,089')
-  act(() => root.root.findByType('button').props.onClick())
+  act(() => root.root.findByProps({ className: 'dsh-balance-refresh' }).props.onClick())
   await act(async () => { root.update(createElement(BillingOverview, { provider: 'deepseek', loadUsage, t })) })
   expect(loadUsage.mock.calls[2]?.[1].aborted).toBe(true)
   await act(async () => { refresh.resolve(usage(999)) })
@@ -163,4 +164,46 @@ it('renders current Harness session snapshots and refreshes when usage or runnin
   running = false
   await act(async () => { root.update(createElement(BillingView, props)) })
   expect(loadUsage).toHaveBeenCalledTimes(4)
+})
+
+
+it('shows all providers on the standalone page and refreshes saved statistics while open', async () => {
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(usage(10))
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  expect(loadUsage.mock.calls[0]?.[0]).toMatchObject({ scope: 'all' })
+  expect(loadUsage.mock.calls[0]?.[0].provider).toBeUndefined()
+  expect(loadUsage.mock.calls[0]?.[0].from).toBeUndefined()
+  await act(async () => { vi.advanceTimersByTime(15_000) })
+  expect(loadUsage).toHaveBeenCalledTimes(2)
+  act(() => root.unmount())
+  await act(async () => { vi.advanceTimersByTime(30_000) })
+  expect(loadUsage).toHaveBeenCalledTimes(2)
+})
+
+it('clears previous conversation statistics and ignores their delayed response', async () => {
+  const pending = deferred<UsageApiResponse>()
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockImplementationOnce(() => pending.promise).mockResolvedValue({ ok: false, code: 'SESSION_NOT_FOUND', message: 'session b' })
+  const props = { sessionId: 'a', t, loadUsage, useSession: () => false, useProjection: () => ({}) } as BillingViewProps
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingView, props)); roots.push(root) })
+  await act(async () => { root.update(createElement(BillingView, { ...props, sessionId: SessionId('b') })) })
+  expect(loadUsage.mock.calls[0]?.[1].aborted).toBe(true)
+  expect(loadUsage.mock.calls[1]?.[0].sessionId).toBe('b')
+  await act(async () => pending.resolve(usage(999)))
+  expect(JSON.stringify(root.toJSON())).toContain('session b')
+  expect(JSON.stringify(root.toJSON())).not.toContain('999')
+})
+
+it('renders native CNY estimates without presenting them as zero USD and retains unknown request warnings', async () => {
+  const response = usage(10)
+  if (!response.ok || response.scope !== 'all') throw new Error('invalid fixture')
+  response.summary.totals = { ...response.summary.totals, requests: 2, pricedRequests: 1, unpricedRequests: 1, nativeCostCny: 6.5815412, cnyPricedRequests: 1, costCny: 6.5815412 }
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(response)
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  const totalCost = root.root.findByProps({ className: 'dsh-billing-card dsh-billing-card-primary' })
+  expect(totalCost.findByType('strong').children.join('')).toContain('6.5815412')
+  expect(totalCost.findByType('strong').children.join('')).not.toContain('$0.00')
+  expect(JSON.stringify(root.toJSON())).toContain('Requests with known pricing only')
 })

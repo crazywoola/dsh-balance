@@ -133,7 +133,8 @@ describe('provider and model switching', () => {
       event('assistant/message', { turn: 2, step: 0, message: { source: { provider: 'other-provider', model: 'deepseek-v4-flash' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 5, '2026-08-17T00:00:10Z'),
     ]
     const records = extractSessionUsage('switch', inheritedEventCount, events, utcOptions)
-    expect(records[0]).toMatchObject({ provider: 'stepfun', model: 'step-3.5-flash', unknownReason: 'unknown-model', costUsd: null })
+    expect(records[0]).toMatchObject({ provider: 'stepfun', model: 'step-3.5-flash', costCny: 0.0000175, costUsd: null })
+    expect(records[0]?.unknownReason).toBeUndefined()
     expect(records[1]).toMatchObject({ provider: 'other-provider', model: 'deepseek-v4-flash', unknownReason: 'unknown-provider', costUsd: null })
     expect(extractSessionUsage('switch', inheritedEventCount, events, { ...utcOptions, provider: 'other-provider' })).toEqual([records[1]])
   })
@@ -173,4 +174,107 @@ it('groups official and legacy DeepSeek routes together without assigning an unv
   expect(official.summary.byModel).toHaveLength(2)
   expect(official.summary.totals).toMatchObject({ requests: 3, pricedRequests: 2, unpricedRequests: 1 })
   expect(official.requestsBySession.get('a')?.[2]).toMatchObject({ provider: 'deepseek', model: 'deepseek-flash', costUsd: null, unknownReason: 'unknown-model' })
+})
+
+
+describe('Harness attempt settlements and cross-session totals', () => {
+  const sample = (inputTokens: number) => ({ type: 'chunk', time: time('2026-08-17T00:00:01Z'), chunk: { type: 'usage', usage: { inputTokens, outputTokens: 2 } } })
+
+  it('counts retries separately, uses the final stream sample, and replaces repeated settlements', () => {
+    const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1),
+      event('assistant/attempt', { turn: 1, step: 0, stream: [sample(3), sample(10)] }, 2, '2026-08-17T00:00:01Z'),
+      event('llm/retry-started', { turn: 1, step: 0 }, 3, '2026-08-17T00:00:02Z'),
+      event('assistant/message', { turn: 1, step: 0, message: {}, stream: [sample(20)] }, 4, '2026-08-17T00:00:03Z'),
+      event('assistant/message', { turn: 1, step: 0, message: {}, stream: [sample(99)], usage: { inputTokens: 30, outputTokens: 2 } }, 5, '2026-08-17T00:00:04Z'),
+    ]
+    const records = extractSessionUsage('one', 0, events, utcOptions)
+    expect(records.map(record => [record.seq, record.inputTokens])).toEqual([[2, 10], [5, 30]])
+    expect(records[1]?.time).toBe('2026-08-17T00:00:02.000Z')
+    const summary = aggregateBilling([{ sessionId: 'one', title: 'One', inheritedEventCount: 0, events }], utcOptions).summary
+    expect(summary.totals).toMatchObject({ requests: 2, inputTokens: 40, outputTokens: 4, pricedRequests: 2 })
+  })
+
+  it('filters only after replacing a settlement with the actual provider', () => {
+    const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1),
+      event('assistant/attempt', { turn: 1, step: 0, stream: [sample(10)] }, 2, '2026-08-17T00:00:01Z'),
+      event('assistant/message', { turn: 1, step: 0, message: { source: { provider: 'StepFun', model: 'step-model' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 3, '2026-08-17T00:00:02Z'),
+    ]
+    expect(extractSessionUsage('one', 0, events, { ...utcOptions, provider: 'deepseek' })).toEqual([])
+    expect(extractSessionUsage('one', 0, events, { ...utcOptions, provider: 'stepfun' })).toHaveLength(1)
+  })
+
+  it('keeps original, fork, and independent conversations additive across every breakdown', () => {
+    const parent = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 10, outputTokens: 2 })]
+    const fork = [...parent, stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'StepFun', 'step-model'), assistant(5, { inputTokens: 20, outputTokens: 3 }, 2)]
+    const sources = [
+      { sessionId: 'parent', title: 'Same title', inheritedEventCount: 0, events: parent },
+      { sessionId: 'fork', title: 'Same title', inheritedEventCount: parent.length, events: fork },
+      { sessionId: 'other', title: 'Same title', inheritedEventCount: 0, events: parent },
+    ]
+    const { summary } = aggregateBilling(sources, utcOptions)
+    expect(summary.totals).toMatchObject({ requests: 3, inputTokens: 40, outputTokens: 7, pricedRequests: 2, unpricedRequests: 1 })
+    expect(summary.byProvider.map(row => [row.provider, row.requests])).toEqual([['deepseek', 2], ['stepfun', 1]])
+    for (const rows of [summary.byProvider, summary.byModel, summary.bySession, summary.byDay, summary.byWeekdayHour]) {
+      expect(rows.reduce((sum, row) => sum + row.requests, 0)).toBe(summary.totals.requests)
+      expect(rows.reduce((sum, row) => sum + row.inputTokens, 0)).toBe(summary.totals.inputTokens)
+      expect(rows.reduce((sum, row) => sum + row.costUsd, 0)).toBeCloseTo(summary.totals.costUsd, 12)
+    }
+    expect(summary.bySession).toHaveLength(3)
+  })
+})
+
+
+describe('activity punchcard', () => {
+  it('groups requests by the browser timezone weekday/hour and applies provider/date filters', () => {
+    const sources = [
+      { sessionId: 'one', title: 'One', inheritedEventCount: 0, events: [requestHeader(0, '2026-09-27T16:30:00Z'), stepStart(1, 1, 0, '2026-09-27T16:30:00Z'), assistant(2, { inputTokens: 10, outputTokens: 2 }, 1, 0, '2026-09-27T16:30:01Z')] },
+      { sessionId: 'two', title: 'Two', inheritedEventCount: 0, events: [requestHeader(0, '2026-09-27T16:45:00Z', 'StepFun', 'step-model'), stepStart(1, 1, 0, '2026-09-27T16:45:00Z'), assistant(2, { inputTokens: 20, outputTokens: 3 }, 1, 0, '2026-09-27T16:45:01Z')] },
+    ]
+    const summary = aggregateBilling(sources, { timeZone: 'Asia/Shanghai' }).summary
+    expect(summary.byWeekdayHour).toHaveLength(1)
+    expect(summary.byWeekdayHour[0]).toMatchObject({ weekday: 1, hour: 0, requests: 2, inputTokens: 30, outputTokens: 5 })
+    expect(aggregateBilling(sources, utcOptions).summary.byWeekdayHour[0]).toMatchObject({ weekday: 0, hour: 16 })
+    expect(aggregateBilling(sources, { timeZone: 'Asia/Shanghai', provider: 'deepseek', from: '2026-09-28', to: '2026-09-28' }).summary.byWeekdayHour[0]).toMatchObject({ weekday: 1, hour: 0, requests: 1 })
+    expect(aggregateBilling(sources, { timeZone: 'Asia/Shanghai', to: '2026-09-27' }).summary.byWeekdayHour).toEqual([])
+  })
+
+  it('combines both occurrences of a DST repeated hour without dropping requests', () => {
+    const events = [requestHeader(0, '2026-11-01T05:15:00Z'), stepStart(1, 1, 0, '2026-11-01T05:15:00Z'), assistant(2, { inputTokens: 1, outputTokens: 1 }),
+      stepStart(3, 2, 0, '2026-11-01T06:15:00Z'), assistant(4, { inputTokens: 2, outputTokens: 1 }, 2)]
+    const summary = aggregateBilling([{ sessionId: 'dst', title: 'DST', inheritedEventCount: 0, events }], { timeZone: 'America/New_York' }).summary
+    expect(summary.byWeekdayHour).toHaveLength(1)
+    expect(summary.byWeekdayHour[0]).toMatchObject({ weekday: 0, hour: 1, requests: 2, inputTokens: 3 })
+    expect(summary.byWeekdayHour.reduce((sum, row) => sum + row.requests, 0)).toBe(summary.totals.requests)
+  })
+})
+
+describe('native StepFun CNY billing', () => {
+  it('prices the screenshot tokens once at official rates and never applies DeepSeek peak multipliers', () => {
+    const at = time('2026-09-29T02:22:19Z')
+    const price = resolveBillingPrice('StepFun', 'step-5-preview', at)!
+    expect(price.currency).toBe('CNY')
+    const usage = { inputTokens: 452_720, outputTokens: 54_176, cacheReadTokens: 6_654_232, cacheWriteTokens: 0 }
+    expect(calculateRequestCost(usage, price, at)).toBe(6.5815412)
+    expect(calculateRequestCost(usage, price, time('2026-09-29T00:00:00Z'))).toBe(6.5815412)
+    expect(calculateRequestCost({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000_000 }, price, at)).toBe(7)
+    expect(resolveBillingPrice('other', 'step-5-preview', at)).toBeUndefined()
+    expect(resolveBillingPrice('stepfun', 'future-step-model', at)).toBeUndefined()
+  })
+
+  it('keeps USD and native CNY separate across every breakdown, converting only with a configured rate', () => {
+    const at = '2026-09-29T00:00:00Z'
+    const sources = [
+      { sessionId: 'usd', title: 'USD', inheritedEventCount: 0, events: [requestHeader(0, at), stepStart(1, 1, 0, at), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 })] },
+      { sessionId: 'cny', title: 'CNY', inheritedEventCount: 0, events: [requestHeader(0, at, 'STEPFUN', 'step-5-preview'), stepStart(1, 1, 0, at), assistant(2, { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000 })] },
+    ]
+    const { summary, requestsBySession } = aggregateBilling(sources, utcOptions)
+    expect(summary.totals).toMatchObject({ requests: 2, pricedRequests: 2, unpricedRequests: 0, cnyPricedRequests: 1, costUsd: 0.22, nativeCostCny: 27.35, costCny: 27.35 })
+    expect(requestsBySession.get('cny')?.[0]).toMatchObject({ costUsd: null, costCny: 27.35 })
+    for (const rows of [summary.byProvider, summary.byModel, summary.bySession, summary.byDay, summary.byWeekdayHour]) {
+      expect(rows.reduce((sum, row) => sum + row.nativeCostCny, 0)).toBe(27.35)
+      expect(rows.reduce((sum, row) => sum + row.pricedRequests, 0)).toBe(2)
+    }
+    expect(aggregateBilling(sources, { ...utcOptions, usdToCny: 7 }).summary.totals.costCny).toBe(28.89)
+    expect(aggregateBilling(sources, { ...utcOptions, provider: 'stepfun' }).summary.totals).toMatchObject({ costUsd: 0, costCny: 27.35, pricedRequests: 1 })
+  })
 })
