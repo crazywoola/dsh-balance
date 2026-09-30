@@ -26,9 +26,9 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-The current source targets DeepSeek Harness **0.2.0-rc.2** ([upstream commit 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)). Use Node.js **22.19+ (22.x) or 24+**. Harness 0.1 APIs are no longer supported by this checkout.
+Version 0.9.0 targets DeepSeek Harness **0.2.0-rc.2** ([upstream commit 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)). Use Node.js **22.19+ (22.x) or 24+**. Harness 0.1 APIs are no longer supported by this checkout.
 
-To install this checkout before its npm release, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
+To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 
 ```bash
 pnpm install --frozen-lockfile
