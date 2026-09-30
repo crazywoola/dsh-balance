@@ -16,7 +16,7 @@ export default defineConfig([
     outDir: 'lib',
     format: 'esm',
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     clean: false,
     dts: false,
     sourcemap: true,

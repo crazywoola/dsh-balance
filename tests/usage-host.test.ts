@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
+import { SESSION_FORMAT_VERSION, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import { apply } from '../src/index.ts'
 
@@ -9,7 +10,7 @@ function event(type: string, data: unknown, seq: number, at = '2026-08-17T00:00:
 }
 
 function makeSession(): { header: SessionHeader; events: SessionEvent[] } {
-  const header = { version: 0, id: 'live-session', createdAt: Date.parse('2026-08-17T00:00:00Z'), seedLength: 0 } as SessionHeader
+  const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id: SessionId('live-session'), createdAt: Date.parse('2026-08-17T00:00:00Z'), isSeeded: false }
   const events = [
     event('request/header', { header: { config: { provider: 'deepseek', model: 'deepseek-v4-flash' } }, reason: 'initial' }, 0),
     event('step/start', { turn: 1, step: 0 }, 1),
@@ -29,15 +30,16 @@ function response(): { value: () => Record<string, unknown>; result: ServerRespo
 }
 
 describe('usage Host route', () => {
-  it('prefers inspection data, caches by revision, and invalidates after a revision change', async () => {
+  it('reads through a read-only handle, caches by revision, and invalidates after a revision change', async () => {
     const session = makeSession()
     let revision = 'r1'
     const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>()
-    const inspect = vi.fn(async () => ({ meta: session.header, events: session.events }))
-    const listSnapshots = vi.fn(async () => [{ header: session.header, revision }])
+    const close = vi.fn(async () => {})
+    const open = vi.fn(async () => ({ id: session.header.id, header: session.header, inheritedEventCount: 0, read: async () => ({ events: session.events }), close }))
+    const list = vi.fn(async () => [{ header: session.header, revision }])
     const ctx = {
       credentials: { resolve: vi.fn() },
-      sessionPersistence: { listSnapshots, inspect },
+      sessionPersistence: { list, open },
       webServer: { register: vi.fn(({ path, handler }: { path: string; handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> }) => { routes.set(path, handler) }) },
       effect: (factory: () => unknown) => factory(),
       logger: { warn: vi.fn() },
@@ -50,29 +52,60 @@ describe('usage Host route', () => {
     const first = response()
     await handler(request('/dsh-balance/api/usage?scope=all&timeZone=UTC'), first.result)
     expect(first.value()).toMatchObject({ ok: true, scope: 'all', source: 'live' })
-    expect(inspect).toHaveBeenCalledOnce()
+    expect(open).toHaveBeenCalledOnce()
 
     const second = response()
     await handler(request('/dsh-balance/api/usage?scope=all&timeZone=UTC'), second.result)
     expect(second.value()).toMatchObject({ ok: true, source: 'cache' })
-    expect(inspect).toHaveBeenCalledOnce()
+    expect(open).toHaveBeenCalledOnce()
 
     revision = 'r2'
     const third = response()
     await handler(request('/dsh-balance/api/usage?scope=session&sessionId=live-session&timeZone=UTC&refresh=1'), third.result)
     expect(third.value()).toMatchObject({ ok: true, scope: 'session', source: 'live' })
-    expect(inspect).toHaveBeenCalledTimes(2)
-    expect(listSnapshots).toHaveBeenCalledTimes(3)
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(open).toHaveBeenLastCalledWith(session.header.id, 'read')
+    expect(close).toHaveBeenCalledTimes(2)
+    expect(list).toHaveBeenCalledTimes(3)
   })
 
-  it('rejects invalid timezone and does not expose any credential or upstream body', async () => {
+  it('excludes the inherited event prefix reported by the storage handle', async () => {
+    const session = makeSession()
+    const close = vi.fn(async () => {})
+    let handler!: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+    const ctx = {
+      credentials: { resolve: vi.fn() },
+      sessionPersistence: {
+        list: async () => [{ header: { ...session.header, isSeeded: true }, revision: 'fork' }],
+        open: async () => ({
+          id: session.header.id,
+          inheritedEventCount: session.events.length,
+          read: async () => ({ events: session.events }),
+          close,
+        }),
+      },
+      webServer: { register: ({ path, handler: route }: { path: string; handler: typeof handler }) => {
+        if (path === '/dsh-balance/api/usage') handler = route
+      } },
+      effect: (factory: () => unknown) => factory(),
+      logger: { warn: vi.fn() },
+    } as unknown as Context
+    apply(ctx, { apiKeyRef: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com', timeoutMs: 1000, cacheMs: 0, allowRemote: false })
+    const res = response()
+    await handler({ method: 'GET', url: '/dsh-balance/api/usage?timeZone=UTC', headers: { host: '127.0.0.1' } } as IncomingMessage, res.result)
+    expect(res.value()).toMatchObject({ ok: true, summary: { totals: { requests: 0, costUsd: 0 } } })
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('closes handles after read failures and rejects invalid timezone without exposing upstream errors', async () => {
+    const close = vi.fn(async () => {})
     const session = makeSession()
     const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>()
     const ctx = {
       credentials: { resolve: vi.fn() },
       sessionPersistence: {
-        listSnapshots: vi.fn(async () => [{ header: session.header, revision: 'r1' }]),
-        inspect: vi.fn(async () => { throw new Error('Bearer super-secret upstream body') }),
+        list: vi.fn(async () => [{ header: session.header, revision: 'r1' }]),
+        open: vi.fn(async () => ({ read: async () => { throw new Error('Bearer super-secret upstream body') }, close })),
       },
       webServer: { register: vi.fn(({ path, handler }: { path: string; handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> }) => { routes.set(path, handler) }) },
       effect: (factory: () => unknown) => factory(),
@@ -90,5 +123,6 @@ describe('usage Host route', () => {
     const value = failed.value()
     expect(value).toMatchObject({ ok: false, code: 'UPSTREAM_UNAVAILABLE' })
     expect(JSON.stringify(value)).not.toContain('super-secret')
+    expect(close).toHaveBeenCalledOnce()
   })
 })

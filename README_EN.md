@@ -24,6 +24,19 @@ The composer readout follows the current session’s provider and model. The Set
 - Native Simplified Chinese and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness
 
+## Compatibility
+
+The current source targets DeepSeek Harness **0.2.0-rc.2** ([upstream commit 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)). Use Node.js **22.19+ (22.x) or 24+**. Harness 0.1 APIs are no longer supported by this checkout.
+
+To install this checkout before its npm release, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm pack
+```
+
+Usage reads the current read-only session handles and excludes fork-inherited events using `inheritedEventCount`. The conversation tab refreshes when token usage changes or a turn finishes.
+
 ## Install
 
 ```bash
@@ -33,7 +46,7 @@ dsh --profile web
 
 Open <http://127.0.0.1:3080/> and go to Settings → Model Balances. The panel sits directly below Agent presets, and the balance summary also appears below the composer in existing sessions. Save the API key in Settings → Models or provide it through the `DEEPSEEK_API_KEY` environment variable.
 
-Usage statistics read saved sessions and prefer the current live session. Prompt content is never exposed. To show a fixed-rate CNY conversion, add for example:
+Usage statistics read persisted session logs, including writes visible from active sessions. Prompt content is never exposed. To show a fixed-rate CNY conversion, add for example:
 
 ```yaml
 usdToCny: 7.2

@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { findBalanceProvider } from './providers.ts'
 import { isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
 
@@ -293,13 +293,12 @@ function inDateRange(time: number, timeZone: string, from: string | undefined, t
 /** Fold a complete session log into request-level billing records. */
 export function extractSessionUsage(
   sessionId: string,
-  header: Pick<SessionHeader, 'seedLength'>,
+  inheritedEventCount: number,
   events: readonly SessionEvent[],
   options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'>,
 ): UsageRequestRecord[] {
   // The inherited prefix is still needed to recover the first live request's header,
   // but its assistant messages must never be charged again in a fork.
-  const seedLength = header.seedLength ?? 0
   let latestRequest: RequestContext | undefined
   const requests = new Map<string, { metadata: RequestContext | undefined; time: number }>()
   let activeStep: string | undefined
@@ -317,7 +316,7 @@ export function extractSessionUsage(
       continue
     }
     if (event.type === 'step/end') activeStep = undefined
-    if (event.type !== 'assistant/message' || event.seq < seedLength) continue
+    if (event.type !== 'assistant/message' || event.seq < inheritedEventCount) continue
 
     const request = requests.get(stepKey(event.data.turn, event.data.step))
     // The completed message records the actual call, even if selection changed in flight.
@@ -454,7 +453,7 @@ function aggregateRecords(
 export interface BillingSource {
   sessionId: string
   title: string
-  header: Pick<SessionHeader, 'seedLength'>
+  inheritedEventCount: number
   events: readonly SessionEvent[]
 }
 
@@ -467,7 +466,7 @@ export function aggregateBilling(
   const titles = new Map<string, string>()
   for (const source of sources) {
     titles.set(source.sessionId, source.title)
-    records.push(...extractSessionUsage(source.sessionId, source.header, source.events, options))
+    records.push(...extractSessionUsage(source.sessionId, source.inheritedEventCount, source.events, options))
   }
   const aggregate = aggregateRecords(records, titles, options.timeZone, options.usdToCny ?? null)
   return {

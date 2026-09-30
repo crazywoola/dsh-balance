@@ -24,6 +24,19 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 - 原生支持简体中文和英文，并跟随 Harness 系统语言切换
 - 支持 Harness 已保存的 `DEEPSEEK_API_KEY`
 
+## 兼容性
+
+当前源码适配 DeepSeek Harness **0.2.0-rc.2**（[上游提交 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)），需要 Node.js **22.19+（22.x）或 24+**。本次源码不再兼容 Harness 0.1 的接口。
+
+npm 新版本发布前，可在本地构建并打包当前源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm pack
+```
+
+消费统计通过新版只读会话句柄读取，以 `inheritedEventCount` 排除分叉继承的记录；会话页在 token 用量变化或一轮运行结束后刷新。
+
 ## 安装
 
 ```bash
@@ -33,7 +46,7 @@ dsh --profile web
 
 打开 <http://127.0.0.1:3080/>，进入“设置 → 模型余额”。该入口位于“Agent 预设”下方，余额摘要也会显示在已有会话的聊天框下方。API Key 可在“设置 → 模型”中保存，或通过 `DEEPSEEK_API_KEY` 环境变量提供。
 
-消费统计从已保存会话和当前运行中的 live session 读取，不展示 prompt 内容。可在插件配置中增加固定汇率，例如：
+消费统计从已保存会话日志读取，包含当前运行会话已写入的记录，不展示 prompt 内容。可在插件配置中增加固定汇率，例如：
 
 ```yaml
 usdToCny: 7.2

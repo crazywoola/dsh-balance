@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-token-meter/client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -290,17 +291,12 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
   )
 }
 
-export function BillingView({ loadUsage, sessionId, useSession, t }: BillingViewProps) {
+export function BillingView({ loadUsage, sessionId, useSession, useProjection, t }: BillingViewProps) {
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
-  const lastAssistant = useSession(snapshot => {
-    for (let index = snapshot.nodes.length - 1; index >= 0; index -= 1) {
-      const node = snapshot.nodes[index]
-      if (node?.kind === 'assistant') return `${node.seq}:${node.time}`
-    }
-    return 'empty'
-  })
+  const running = useSession(snapshot => snapshot.running)
+  const tokenUsage = useProjection('tokenUsage')
   const options = useMemo<UsageLoadOptions>(() => ({ scope: 'session', sessionId, timeZone }), [sessionId, timeZone])
-  const { result, loading, refresh } = useUsageResult(loadUsage, options, `${sessionId}:${lastAssistant}`)
+  const { result, loading, refresh } = useUsageResult(loadUsage, options, `${sessionId}:${running}:${JSON.stringify(tokenUsage)}`)
   const sessionResult = result?.ok === true && result.scope === 'session' ? result as UsageSessionSuccess : undefined
 
   return (

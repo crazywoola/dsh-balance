@@ -4,8 +4,8 @@ import type { ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BalanceDock } from '../src/client/BalanceDock.tsx'
 import type { BalanceDockInjected, BalanceDockProps } from '../src/client/BalanceDock.tsx'
-import { BillingOverview } from '../src/client/BillingTab.tsx'
-import type { UsageTabInjected } from '../src/client/BillingTab.tsx'
+import { BillingOverview, BillingView } from '../src/client/BillingTab.tsx'
+import type { BillingViewProps, UsageTabInjected } from '../src/client/BillingTab.tsx'
 import type { BalanceApiResponse } from '../src/types.ts'
 import type { UsageApiResponse, UsageTotals } from '../src/billing.ts'
 import { en } from '../src/client/locales.ts'
@@ -139,4 +139,28 @@ it('queries the official DeepSeek account while preserving the selected deepseek
   expect(JSON.stringify(root.toJSON())).toContain('deepseek-flash')
   expect(JSON.stringify(root.toJSON())).toContain('$12.00')
   expect(JSON.stringify(root.toJSON())).not.toContain('not supported')
+})
+
+
+it('renders current Harness session snapshots and refreshes when usage or running state changes', async () => {
+  let running = false
+  let tokens = { uncachedInputTokens: 10, outputTokens: 20, cacheReadTokens: 0, cacheWriteTokens: 0 }
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue({ ok: false, code: 'SESSION_NOT_FOUND', message: '' })
+  // Current Harness snapshots carry lifecycle state, not conversation nodes.
+  const props = {
+    sessionId: 'a', t, loadUsage,
+    useSession: (select: (snapshot: { running: boolean }) => unknown) => select({ running }),
+    useProjection: (key: string) => { expect(key).toBe('tokenUsage'); return tokens },
+  } as BillingViewProps
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingView, props)); roots.push(root) })
+  expect(loadUsage).toHaveBeenCalledTimes(1)
+  tokens = { ...tokens, outputTokens: 40 }
+  await act(async () => { root.update(createElement(BillingView, props)) })
+  expect(loadUsage).toHaveBeenCalledTimes(2)
+  running = true
+  await act(async () => { root.update(createElement(BillingView, props)) })
+  running = false
+  await act(async () => { root.update(createElement(BillingView, props)) })
+  expect(loadUsage).toHaveBeenCalledTimes(4)
 })

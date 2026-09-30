@@ -29,7 +29,7 @@ function assistant(seq: number, usage: unknown, turn = 1, step = 0, at = '2026-0
   return event('assistant/message', { turn, step, message: {}, ...(usage === undefined ? {} : { usage }) }, seq, at)
 }
 
-const header = { seedLength: 0 }
+const inheritedEventCount = 0
 const utcOptions = { timeZone: 'UTC' }
 
 describe('billing price calculation', () => {
@@ -66,14 +66,14 @@ describe('extractSessionUsage', () => {
       stepStart(6, 3, 0, '2026-08-17T02:00:00Z'),
       assistant(7, undefined, 3, 0, '2026-08-17T02:00:01Z'),
     ]
-    const records = extractSessionUsage('session-a', header, events, utcOptions)
+    const records = extractSessionUsage('session-a', inheritedEventCount, events, utcOptions)
     expect(records).toHaveLength(3)
     expect(records[0]).toMatchObject({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 2, cacheWriteTokens: 3, costUsd: 0.000006174 })
     expect(records[1]).toMatchObject({ costUsd: null, unknownReason: 'unknown-provider' })
     expect(records[2]).toMatchObject({ costUsd: null, unknownReason: 'missing-usage' })
   })
 
-  it('skips inherited fork events before seedLength while retaining their request header', () => {
+  it('skips inherited fork events before inheritedEventCount while retaining their request header', () => {
     const events = [
       requestHeader(0, '2026-08-16T00:00:00Z'),
       stepStart(1, 1, 0, '2026-08-16T00:00:00Z'),
@@ -81,7 +81,7 @@ describe('extractSessionUsage', () => {
       stepStart(3, 2, 0, '2026-08-17T00:00:00Z'),
       assistant(4, { inputTokens: 1, outputTokens: 1 }, 2, 0, '2026-08-17T00:00:01Z'),
     ]
-    const records = extractSessionUsage('fork', { seedLength: 3 }, events, utcOptions)
+    const records = extractSessionUsage('fork', 3, events, utcOptions)
     expect(records).toHaveLength(1)
     expect(records[0]).toMatchObject({ turn: 2, provider: 'deepseek', model: 'deepseek-v4-flash' })
   })
@@ -92,8 +92,8 @@ describe('extractSessionUsage', () => {
       stepStart(1, 1, 0, '2026-08-17T23:30:00Z'),
       assistant(2, { inputTokens: 1, outputTokens: 1 }, 1, 0, '2026-08-17T23:30:01Z'),
     ]
-    expect(extractSessionUsage('tz', header, events, { timeZone: 'Asia/Shanghai' })[0]?.time).toBe('2026-08-17T23:30:00.000Z')
-    const summary = aggregateBilling([{ sessionId: 'tz', title: 'TZ', header, events }], { timeZone: 'Asia/Shanghai' }).summary
+    expect(extractSessionUsage('tz', inheritedEventCount, events, { timeZone: 'Asia/Shanghai' })[0]?.time).toBe('2026-08-17T23:30:00.000Z')
+    const summary = aggregateBilling([{ sessionId: 'tz', title: 'TZ', inheritedEventCount, events }], { timeZone: 'Asia/Shanghai' }).summary
     expect(summary.byDay[0]?.date).toBe('2026-08-18')
   })
 })
@@ -103,8 +103,8 @@ describe('aggregateBilling', () => {
     const firstEvents = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 })]
     const secondEvents = [requestHeader(0, '2026-08-17T00:00:00Z', 'deepseek', 'deepseek-v4-pro'), stepStart(1), assistant(2, { inputTokens: 0, outputTokens: 1_000_000 })]
     const summary = aggregateBilling([
-      { sessionId: 'one', title: 'One', header, events: firstEvents },
-      { sessionId: 'two', title: 'Two', header, events: secondEvents },
+      { sessionId: 'one', title: 'One', inheritedEventCount, events: firstEvents },
+      { sessionId: 'two', title: 'Two', inheritedEventCount, events: secondEvents },
     ], { ...utcOptions, usdToCny: 7 }).summary
     expect(summary.totals.requests).toBe(2)
     expect(summary.totals.costUsd).toBe(2.2)
@@ -132,26 +132,26 @@ describe('provider and model switching', () => {
       stepStart(4, 2),
       event('assistant/message', { turn: 2, step: 0, message: { source: { provider: 'other-provider', model: 'deepseek-v4-flash' } }, usage: { inputTokens: 20, outputTokens: 2 } }, 5, '2026-08-17T00:00:10Z'),
     ]
-    const records = extractSessionUsage('switch', header, events, utcOptions)
+    const records = extractSessionUsage('switch', inheritedEventCount, events, utcOptions)
     expect(records[0]).toMatchObject({ provider: 'stepfun', model: 'step-3.5-flash', unknownReason: 'unknown-model', costUsd: null })
     expect(records[1]).toMatchObject({ provider: 'other-provider', model: 'deepseek-v4-flash', unknownReason: 'unknown-provider', costUsd: null })
-    expect(extractSessionUsage('switch', header, events, { ...utcOptions, provider: 'other-provider' })).toEqual([records[1]])
+    expect(extractSessionUsage('switch', inheritedEventCount, events, { ...utcOptions, provider: 'other-provider' })).toEqual([records[1]])
   })
 
   it('dates later requests by their own start instead of a reused header', () => {
     const events = [requestHeader(0, '2026-08-17T00:00:00Z', 'DEEPSEEK'), stepStart(1), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 }),
       stepStart(3, 2, 0, '2026-08-18T01:00:00Z'), assistant(4, { inputTokens: 1_000_000, outputTokens: 0 }, 2, 0, '2026-08-18T01:00:01Z')]
-    const aggregate = aggregateBilling([{ sessionId: 'a', title: 'A', header, events }], utcOptions)
+    const aggregate = aggregateBilling([{ sessionId: 'a', title: 'A', inheritedEventCount, events }], utcOptions)
     expect(aggregate.summary.byDay.map(day => [day.date, day.costUsd])).toEqual([['2026-08-18', 0.44], ['2026-08-17', 0.22]])
     expect(aggregate.summary.byModel).toHaveLength(1)
     expect(aggregate.summary.byModel[0]?.provider).toBe('deepseek')
-    expect(extractSessionUsage('a', header, events, { ...utcOptions, from: '2026-08-18' })).toHaveLength(1)
+    expect(extractSessionUsage('a', inheritedEventCount, events, { ...utcOptions, from: '2026-08-18' })).toHaveLength(1)
   })
 
   it('keeps provider totals separate even for the same model and filters all breakdowns consistently', () => {
     const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5, cacheReadTokens: 20, cacheWriteTokens: 10 }),
       stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'STEPFUN'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2)]
-    const source = { sessionId: 'a', title: 'A', header, events }
+    const source = { sessionId: 'a', title: 'A', inheritedEventCount, events }
     expect(aggregateBilling([source], utcOptions).summary.byModel).toHaveLength(2)
     const { summary, requestsBySession } = aggregateBilling([source], { ...utcOptions, provider: 'stepfun' })
     expect(summary.totals).toMatchObject({ requests: 1, inputTokens: 7, outputTokens: 8, unpricedRequests: 1 })
@@ -166,7 +166,7 @@ it('groups official and legacy DeepSeek routes together without assigning an unv
   const events = [requestHeader(0, '2026-08-17T00:00:00Z', 'deepseek'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5 }),
     stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'deepseek-official'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2),
     stepStart(6, 3), requestHeader(7, '2026-08-17T00:00:10Z', 'DEEPSEEK-OFFICIAL', 'deepseek-flash'), assistant(8, { inputTokens: 3, outputTokens: 4 }, 3)]
-  const source = { sessionId: 'a', title: 'A', header, events }
+  const source = { sessionId: 'a', title: 'A', inheritedEventCount, events }
   const legacy = aggregateBilling([source], { ...utcOptions, provider: 'deepseek' })
   const official = aggregateBilling([source], { ...utcOptions, provider: 'deepseek-official' })
   expect(official.summary).toEqual(legacy.summary)

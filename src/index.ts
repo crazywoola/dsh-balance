@@ -314,8 +314,8 @@ export function apply(ctx: Context, config: Config): void {
 
     try {
       const snapshots = query.scope === 'session'
-        ? (await ctx.sessionPersistence.listSnapshots()).filter(snapshot => String(snapshot.header.id) === query.sessionId)
-        : await ctx.sessionPersistence.listSnapshots()
+        ? (await ctx.sessionPersistence.list()).filter(snapshot => String(snapshot.header.id) === query.sessionId)
+        : await ctx.sessionPersistence.list()
       if (query.scope === 'session' && snapshots.length === 0) {
         sendJson(res, 404, usageFailure('SESSION_NOT_FOUND', '找不到指定会话'))
         return
@@ -332,12 +332,17 @@ export function apply(ctx: Context, config: Config): void {
       }
 
       const sources = await mapWithConcurrency(snapshots, 4, async (snapshot) => {
-        const inspection = await ctx.sessionPersistence.inspect(snapshot.header.id)
-        return {
-          sessionId: String(inspection.meta.id),
-          title: sessionTitle(inspection.events, String(inspection.meta.id)),
-          header: inspection.meta,
-          events: inspection.events,
+        const handle = await ctx.sessionPersistence.open(snapshot.header.id, 'read')
+        try {
+          const { events } = await handle.read()
+          return {
+            sessionId: String(handle.id),
+            title: sessionTitle(events, String(handle.id)),
+            inheritedEventCount: handle.inheritedEventCount,
+            events,
+          }
+        } finally {
+          await handle.close()
         }
       })
       const usdToCny = normalizeUsdToCny(config.usdToCny)
