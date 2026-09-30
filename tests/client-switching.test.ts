@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BalanceDock } from '../src/client/BalanceDock.tsx'
 import type { BalanceDockInjected, BalanceDockProps } from '../src/client/BalanceDock.tsx'
 import { BillingOverview, BillingView } from '../src/client/BillingTab.tsx'
+import { Dropdown } from '../src/client/Dropdown.tsx'
 import type { BillingViewProps, UsageTabInjected } from '../src/client/BillingTab.tsx'
 import type { BalanceApiResponse } from '../src/types.ts'
 import type { UsageApiResponse, UsageTotals } from '../src/billing.ts'
@@ -194,6 +195,57 @@ it('labels incomplete statistics and removes the notice after unreadable session
   await act(async () => { vi.advanceTimersByTime(15_000) })
   expect(JSON.stringify(root.toJSON())).not.toContain('sessions could not be read')
   expect(JSON.stringify(root.toJSON())).toContain('456')
+})
+
+it('shows one category at a time, paginates long lists, and clamps the page after a refresh', async () => {
+  const result = usage(10)
+  if (!result.ok || result.scope !== 'all') throw new Error('invalid fixture')
+  result.summary.byModel = Array.from({ length: 23 }, (_, index) => ({ ...result.summary.totals, provider: 'deepseek', model: `long-model-name-${index}` }))
+  result.summary.bySession = [{ ...result.summary.totals, sessionId: 'a', title: 'A very long conversation title' }]
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(result)
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  const rows = () => root.root.findAllByProps({ className: 'dsh-billing-list-row' })
+  expect(rows()).toHaveLength(10)
+  expect(JSON.stringify(root.toJSON())).not.toContain('A very long conversation title')
+  act(() => root.root.findByProps({ 'aria-label': 'Next page' }).props.onClick())
+  expect(rows()).toHaveLength(10)
+  expect(rows()[0]!.findByType('code').children.join('')).toBe('long-model-name-10')
+  act(() => root.root.findByProps({ 'aria-label': 'Next page' }).props.onClick())
+  expect(rows()).toHaveLength(3)
+  expect(root.root.findByProps({ 'aria-label': 'Next page' }).props.disabled).toBe(true)
+  result.summary.byModel = result.summary.byModel.slice(0, 2)
+  await act(async () => { vi.advanceTimersByTime(15_000) })
+  expect(rows()).toHaveLength(2)
+  expect(rows()[0]!.findByType('code').children.join('')).toBe('long-model-name-0')
+  act(() => root.root.findAllByProps({ role: 'tab' })[2]!.props.onClick())
+  expect(rows()).toHaveLength(1)
+  expect(JSON.stringify(root.toJSON())).toContain('A very long conversation title')
+  const sessionTab = root.root.findAllByProps({ role: 'tab' })[2]!
+  act(() => sessionTab.props.onKeyDown({ key: 'Home', preventDefault: vi.fn() }))
+  expect(root.root.findAllByProps({ role: 'tab' })[0]!.props['aria-selected']).toBe(true)
+})
+
+it('filters and paginates session requests while preserving full model identifiers', async () => {
+  const base = usage(10)
+  if (!base.ok || base.scope !== 'all') throw new Error('invalid fixture')
+  const requests = Array.from({ length: 24 }, (_, index) => ({ sessionId: 'a', inputTokens: 10, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 0, costUsd: null, seq: index, time: new Date().toISOString(), turn: 1, step: index, provider: 'deepseek', model: index % 2 === 0 ? 'very-long-model-identifier-a' : 'model-b' }))
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue({ ok: true, scope: 'session', fetchedAt: new Date().toISOString(), source: 'live', summary: base.summary, session: { ...base.summary.totals, sessionId: 'a', title: 'a' }, requests })
+  const props = { sessionId: 'a', t, loadUsage, useSession: () => false, useProjection: () => ({}) } as BillingViewProps
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingView, props)); roots.push(root) })
+  act(() => root.root.findAllByProps({ role: 'tab' })[1]!.props.onClick())
+  const rows = () => root.root.findAllByProps({ className: 'dsh-billing-request-row' })
+  expect(rows()).toHaveLength(10)
+  act(() => root.root.findByProps({ 'aria-label': 'Next page' }).props.onClick())
+  const filter = root.root.findAllByType(Dropdown).find(item => item.props.label === 'Filter models')!
+  act(() => filter.props.onChange(JSON.stringify(['deepseek', 'very-long-model-identifier-a'])))
+  expect(rows()).toHaveLength(10)
+  expect(rows()[0]!.findByType('code').props.title).toBe('deepseek / very-long-model-identifier-a')
+  expect(rows().every(row => row.findByType('code').children.join('') === 'very-long-model-identifier-a')).toBe(true)
+  act(() => root.root.findByProps({ 'aria-label': 'Next page' }).props.onClick())
+  expect(rows()).toHaveLength(2)
+  expect(loadUsage).toHaveBeenCalledOnce()
 })
 
 it('clears previous conversation statistics and ignores their delayed response', async () => {

@@ -50,23 +50,25 @@ export const balanceStyles = `
 .dsh-balance-skeleton { min-height: 180px; display: flex; flex-direction: column; gap: 24px; padding: 20px; border: 1px solid var(--ledger-line); border-radius: 12px; background: var(--ledger-paper); font-size: 12px; color: var(--ledger-muted); }
 .dsh-balance-skeleton i { width: 60%; height: 32px; border-radius: 4px; background: var(--ledger-line); }
 .dsh-balance-skeleton i:last-child { width: 35%; height: 16px; }
-@container (max-width: 700px) { .dsh-billing-card-grid, .dsh-billing-table-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+@container (max-width: 700px) { .dsh-billing-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 @container (max-width: 480px) {
   .dsh-billing-request-row { align-items: flex-start; flex-direction: column; }
   .dsh-billing-request-row > div:last-child { align-items: flex-start; text-align: left; }
-  .dsh-billing-card-grid, .dsh-billing-table-grid, .dsh-model-grid { grid-template-columns: 1fr !important; }
+  .dsh-billing-card-grid, .dsh-model-grid { grid-template-columns: 1fr !important; }
   .dsh-billing-list-row { flex-wrap: wrap; }
   .dsh-billing-list-value { text-align: left; align-items: flex-start; }
 }
 .dsh-billing-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .dsh-usage-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--dsw-alias-border-l2, #e3e4e7); border-radius: var(--dsw-radius-md, 8px); background: var(--dsw-alias-bg-layer-3, #fafafa); color: var(--dsw-alias-label-primary, #202124); font: inherit; font-size: 13px; cursor: pointer; }
 .dsh-usage-select:hover, .dsh-usage-select[aria-expanded='true'] { background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 6%, transparent)); }
+.dsh-usage-select { min-width: 0; max-width: 100%; }
+.dsh-usage-select > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-usage-select svg { flex: none; color: var(--dsw-alias-label-tertiary, #8b8e94); transition: transform .15s ease; }
 .dsh-usage-select[aria-expanded='true'] svg { transform: rotate(180deg); }
 .dsh-usage-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
 .dsh-usage-select-menu { position: fixed; z-index: 1100; padding: 6px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2, #e3e4e7); border-radius: var(--dsw-radius-lg, 12px); background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-3, #fafafa)); color: var(--dsw-alias-label-primary, #202124); box-shadow: var(--dsw-elevation-prominent, 0 8px 32px #0002); backdrop-filter: var(--dsw-menu-backdrop-filter, none); overflow-y: auto; overscroll-behavior: contain; font-family: inherit; }
 .dsh-usage-select-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; box-sizing: border-box; border-radius: var(--dsw-radius-md, 8px); padding: 6px 10px; font-size: 13px; line-height: 24px; cursor: pointer; }
-.dsh-usage-select-option > span { min-width: 0; overflow-wrap: anywhere; }
+.dsh-usage-select-option > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-width: 0; overflow: hidden; overflow-wrap: anywhere; line-height: 20px; }
 .dsh-usage-select-option svg { flex: none; }
 .dsh-usage-select-option[data-active='true'] { background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 6%, transparent)); }
 .dsh-usage-select-option[aria-selected='true'] { font-weight: 500; }
@@ -108,17 +110,6 @@ export const balanceStyles = `
 .dsh-billing-cost-value { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .dsh-billing-cost-value strong { font-size: 20px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .dsh-billing-cost-value small, .dsh-billing-cost-value span { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.35; }
-.dsh-billing-table-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.dsh-billing-list-section {
-  min-width: 0;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  padding: 16px;
-  background: var(--dsw-alias-bg-layer-3);
-}
-.dsh-billing-list-section h3,
-.dsh-billing-session-breakdown h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
-.dsh-billing-list-wide { grid-column: 1 / -1; }
 .dsh-billing-list { display: flex; flex-direction: column; gap: 2px; }
 .dsh-billing-list-row {
   display: flex;
@@ -137,7 +128,6 @@ export const balanceStyles = `
 .dsh-billing-list-value .dsh-billing-cost-value strong { font-size: 16px; overflow-wrap: anywhere; }
 .dsh-billing-list-value > small { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
 .dsh-billing-session-title { overflow: hidden; color: var(--dsw-alias-label-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.dsh-billing-session-breakdown { border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; padding: 16px; background: var(--dsw-alias-bg-layer-3); }
 .dsh-billing-request-list { display: flex; flex-direction: column; }
 .dsh-billing-request-row {
   display: flex;
@@ -154,6 +144,51 @@ export const balanceStyles = `
 .dsh-billing-request-row span { color: var(--dsw-alias-label-tertiary); }
 .dsh-billing-request-row code { color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .dsh-billing-request-row strong { font-variant-numeric: tabular-nums; }
+.dsh-billing-detail-panel { min-width: 0; border: 1px solid var(--ledger-line); border-radius: var(--dsw-radius-lg, 12px); background: var(--ledger-paper); }
+.dsh-billing-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--ledger-line); }
+.dsh-billing-detail-tabs { display: flex; gap: 20px; min-width: 0; }
+.dsh-billing-detail-tabs > button { display: inline-flex; align-items: center; gap: 7px; min-height: 54px; margin-bottom: -1px; padding: 10px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ledger-muted); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.dsh-billing-detail-tabs > button:hover { color: var(--ledger-ink); }
+.dsh-billing-detail-tabs > button[aria-selected='true'] { border-bottom-color: var(--dsw-alias-state-business-primary, #4d6bfe); color: var(--dsw-alias-state-business-primary, #4d6bfe); font-weight: 600; }
+.dsh-billing-tab-count { min-width: 19px; padding: 2px 5px; border-radius: 5px; background: var(--dsw-alias-interactive-bg-hover, #00000006); color: var(--ledger-muted); font-size: 10px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.dsh-billing-detail-tabs > button[aria-selected='true'] .dsh-billing-tab-count { color: inherit; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4d6bfe) 8%, transparent); }
+.dsh-billing-detail-mobile { display: none; min-width: 0; }
+.dsh-billing-detail-tools { display: flex; min-width: 0; max-width: 300px; }
+.dsh-billing-detail-body { min-width: 0; padding: 4px 16px 0; border-radius: 0 0 12px 12px; }
+.dsh-billing-detail-body:focus-visible, .dsh-billing-detail-tabs > button:focus-visible, .dsh-billing-page-button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
+.dsh-billing-detail-body .dsh-balance-status { border: 0; background: transparent; padding: 32px 12px; text-align: center; }
+.dsh-billing-list-row > div:first-child, .dsh-billing-request-row > div:first-child { flex: 1; min-width: 0; }
+.dsh-billing-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dsh-billing-list-row .dsh-billing-name, .dsh-billing-request-row .dsh-billing-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-billing-provider-tag { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; border-radius: 4px; background: var(--dsw-alias-interactive-bg-hover, #00000006); color: var(--ledger-muted); font-size: 10px; line-height: 1.4; }
+.dsh-billing-token-caption { display: flex; gap: 4px 14px; flex-wrap: wrap; color: var(--ledger-muted); font-size: 11px; line-height: 1.6; }
+.dsh-billing-token-caption > span { white-space: nowrap; }
+.dsh-billing-token-caption b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.dsh-billing-request-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dsh-billing-request-row > div:last-child { flex: 0 1 50%; }
+.dsh-billing-request-row > div:last-child .dsh-billing-token-caption { justify-content: flex-end; }
+.dsh-billing-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 12px 0; border-top: 1px solid var(--ledger-line); color: var(--ledger-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.dsh-billing-pagination-actions { display: flex; align-items: center; gap: 6px; }
+.dsh-billing-pagination-actions .dsh-usage-select { min-height: 30px; font-size: 11px; }
+.dsh-billing-page-button { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; padding: 0; border: 1px solid var(--ledger-line); border-radius: var(--dsw-radius-md, 8px); background: transparent; color: var(--ledger-ink); cursor: pointer; }
+.dsh-billing-page-button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover, #00000006); }
+.dsh-billing-page-button:disabled { opacity: .35; cursor: default; }
+@container (max-width: 560px) {
+  .dsh-billing-detail-tabs { display: none; }
+  .dsh-billing-detail-mobile { display: block; flex: 1; }
+  .dsh-billing-detail-mobile .dsh-usage-select { width: 100%; }
+  .dsh-billing-detail-header { padding: 12px; flex-wrap: wrap; }
+  .dsh-billing-detail-tools { flex: 1; max-width: 100%; }
+  .dsh-billing-detail-tools .dsh-usage-select { width: 100%; }
+}
+@container (max-width: 480px) {
+  .dsh-billing-list-row { gap: 8px; }
+  .dsh-billing-list-row > div:first-child { flex-basis: 100%; }
+  .dsh-billing-request-row > div:first-child, .dsh-billing-request-row > div:last-child { flex: none; width: 100%; }
+  .dsh-billing-request-row > div:last-child .dsh-billing-token-caption { justify-content: flex-start; }
+  .dsh-billing-detail-body { padding-inline: 12px; }
+  .dsh-billing-pagination-actions { margin-left: auto; }
+}
 .dsh-model-count { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .dsh-model-count .dsh-balance-dot { background: var(--dsw-alias-state-success-primary); }
 .dsh-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }

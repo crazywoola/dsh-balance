@@ -13,6 +13,7 @@ import { aggregateBilling } from '../../src/billing.ts'
 const params = new URLSearchParams(location.search)
 const locale = params.get('lang') === 'en' ? en : zh
 const state = params.get('state')
+const dense = params.get('dense') === '1'
 document.documentElement.lang = locale['locale.tag']
 document.documentElement.dataset.theme = params.get('theme') ?? 'light'
 const t = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, String(value)), locale[key] ?? key)
@@ -42,7 +43,7 @@ const loadModels = async (refresh, signal, provider = 'deepseek') => {
     : [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }, { id: 'deepseek-v4-pro', ownedBy: 'deepseek' }] }
 }
 const loadUsage = async (options) => {
-  const sources = Array.from({ length: 3 }, (_, session) => {
+  const sources = Array.from({ length: dense ? 24 : 3 }, (_, session) => {
     const events = []
     for (let day = 0; day < 30; day++) {
       for (const hour of [8, 10, 11, 14, 15, 17, 20, 22]) {
@@ -52,8 +53,9 @@ const loadUsage = async (options) => {
           at.setDate(at.getDate() - day)
           at.setHours(hour, call * 8, 0, 0)
           if (at > new Date()) continue
-          const provider = session === 2 ? 'stepfun' : 'deepseek'
-          const model = session === 2 ? 'step-3.5-flash' : session === 1 ? 'deepseek-v4-pro' : 'deepseek-v4-flash'
+          const provider = session % 3 === 2 ? 'stepfun' : 'deepseek'
+          const model = dense && session > 2 ? `evaluation-model-with-an-extra-long-identifier-and-context-window-2026-preview-${session}`
+            : session === 2 ? 'step-3.5-flash' : session === 1 ? 'deepseek-v4-pro' : 'deepseek-v4-flash'
           const turn = events.length / 2 + 1
           events.push({ type: 'step/start', seq: events.length, time: +at, data: { turn, step: 0 } })
           events.push({ type: 'assistant/message', seq: events.length, time: +at + 1_000, data: { turn, step: 0,
@@ -61,7 +63,7 @@ const loadUsage = async (options) => {
         }
       }
     }
-    return { sessionId: `sample-${session}`, title: ['代码审查 / Code review', '日常任务 / Daily tasks', '模型评估 / Model evaluation'][session], inheritedEventCount: 0, events: state === 'empty' ? [] : events }
+    return { sessionId: `sample-${session}`, title: dense ? `较长的会话标题示例：分析多个提供方与不同模型的用量及费用，保留完整名称以便查看 ${session}` : ['代码审查 / Code review', '日常任务 / Daily tasks', '模型评估 / Model evaluation'][session], inheritedEventCount: 0, events: state === 'empty' ? [] : events }
   })
   if (params.get('page') === 'session') {
     const total = { inputTokens: 452720, outputTokens: 54176, cacheReadTokens: 6654232, cacheWriteTokens: 0 }
@@ -70,7 +72,7 @@ const loadUsage = async (options) => {
       const at = new Date('2026-09-29T02:22:19Z').getTime() + index * 10000
       return [{ type: 'step/start', seq: index * 2, time: at, data: { turn: Math.floor(index / 12) + 1, step: index % 12 } },
         { type: 'assistant/message', seq: index * 2 + 1, time: at + 1000, data: { turn: Math.floor(index / 12) + 1, step: index % 12,
-          message: { source: { provider: 'StepFun', model: 'step-5-preview' } }, usage } }]
+          message: { source: { provider: 'StepFun', model: dense ? ['step-5-preview', 'step-3.5-flash', 'evaluation-model-with-an-extra-long-identifier-and-context-window-2026-preview'][index % 3] : 'step-5-preview' } }, usage } }]
     }).flat()
     sources.splice(0, sources.length, { sessionId: 'preview', title: 'StepFun conversation', inheritedEventCount: 0, events: state === 'empty' ? [] : events })
   }

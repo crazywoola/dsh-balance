@@ -36,7 +36,7 @@ export function Dropdown<T extends string>({ label, value, options, onChange }: 
     const above = rect.top - 16
     const upwards = below < 160 && above > below
     const maxHeight = Math.max(80, Math.min(320, upwards ? above : below))
-    const height = Math.min(options.length * 36 + 12, maxHeight)
+    const height = Math.min(list.current?.scrollHeight ?? options.length * 36 + 12, maxHeight)
     setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), top: upwards ? rect.top - height - 6 : rect.bottom + 6, width, maxHeight })
   }, [open, options.length])
 
@@ -85,14 +85,14 @@ export function Dropdown<T extends string>({ label, value, options, onChange }: 
           if (index >= 0) { event.preventDefault(); setActive(index); setOpen(true) }
         }
       }}>
-      <span>{options[selected]?.label ?? value}</span>
+      <span title={options[selected]?.label ?? value}>{options[selected]?.label ?? value}</span>
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
     </button>
     {open ? createPortal(<div ref={list} id={id} role="listbox" aria-label={label} className="dsh-usage-select-menu" style={position}>
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value === value}
         className="dsh-usage-select-option" data-active={index === active} onPointerMove={() => setActive(index)}
         onMouseDown={event => event.preventDefault()} onClick={() => choose(index)}>
-        <span>{option.label}</span>
+        <span title={option.label}>{option.label}</span>
         {option.value === value ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m3 8 3 3 7-7" /></svg> : null}
       </div>)}
     </div>, document.body) : null}

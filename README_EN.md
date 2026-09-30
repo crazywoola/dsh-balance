@@ -39,6 +39,10 @@ Usage reads the current read-only session handles and excludes fork-inherited ev
 
 Global statistics skip sessions that the current dsh cannot read, such as unsupported historical formats or damaged logs, and show how many sessions were excluded. Partial results are retried on the next refresh without caching. An unreadable selected session, or a collection where every session fails to read, still reports an error instead of showing zero usage.
 
+Usage breakdowns use counted tabs for models, providers, sessions, and dates, with a themed category selector on narrow screens. Lists default to 10 rows per page, with 5 / 10 / 20 options. The conversation page separates model summaries and requests, and requests can be filtered by model. Long names are truncated with their full value available on hover.
+
+![Tabbed breakdown and pagination](./docs/dsh-usage-tabs.jpg)
+
 ## Install
 
 ```bash

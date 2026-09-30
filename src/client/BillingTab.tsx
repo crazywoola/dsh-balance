@@ -11,6 +11,7 @@ import type {
 import { findBalanceProvider } from '../providers.ts'
 import { Punchcard } from './Punchcard.tsx'
 import { Dropdown } from './Dropdown.tsx'
+import { DetailPanel, PagedRows } from './BillingDetails.tsx'
 import { displayAmount } from './format.ts'
 import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
 
@@ -122,21 +123,24 @@ function SummaryCards({ summary, t }: { summary: UsageSummary; t: BillingOvervie
   )
 }
 
-function TotalsCaption({ totals, t }: { totals: UsageTotals; t: BillingOverviewProps['t'] }) {
-  return <span className="dsh-billing-secondary">{t('billing.tokensBreakdown', {
-    input: formatTokens(totals.inputTokens),
-    output: formatTokens(totals.outputTokens),
-    cacheHit: formatTokens(totals.cacheReadTokens),
-    cacheWrite: formatTokens(totals.cacheWriteTokens),
-  })}</span>
+function TotalsCaption({ totals, t }: { totals: Pick<UsageTotals, 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>; t: BillingOverviewProps['t'] }) {
+  return <span className="dsh-billing-token-caption">
+    <span>{t('billing.inputShort')} <b>{formatTokens(totals.inputTokens)}</b></span>
+    <span>{t('billing.outputShort')} <b>{formatTokens(totals.outputTokens)}</b></span>
+    <span>{t('billing.cacheReadShort')} <b>{formatTokens(totals.cacheReadTokens)}</b></span>
+    {totals.cacheWriteTokens > 0 ? <span>{t('billing.cacheWriteShort')} <b>{formatTokens(totals.cacheWriteTokens)}</b></span> : null}
+  </span>
 }
 
-function ModelRows({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
+function ModelRows({ summary, items = summary.byModel, t }: { summary: UsageSummary; items?: readonly UsageSummary['byModel'][number][]; t: BillingOverviewProps['t'] }) {
   return <div className="dsh-billing-list">
-    {summary.byModel.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : summary.byModel.map(item => (
+    {items.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : items.map(item => (
       <article className="dsh-billing-list-row" key={JSON.stringify([item.provider, item.model])}>
-        <div>
-          <code>{item.provider}/{item.model}</code>
+        <div className="dsh-billing-row-main">
+          <div className="dsh-billing-row-title">
+            <code className="dsh-billing-name" title={item.model}>{item.model}</code>
+            <span className="dsh-billing-provider-tag" title={item.provider}>{findBalanceProvider(item.provider)?.name ?? item.provider}</span>
+          </div>
           <TotalsCaption totals={item} t={t} />
         </div>
         <div className="dsh-billing-list-value">
@@ -148,65 +152,51 @@ function ModelRows({ summary, t }: { summary: UsageSummary; t: BillingOverviewPr
   </div>
 }
 
-function ProviderRows({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
+function AggregateRows({ items, t }: { items: readonly { key: string; title: string; totals: UsageTotals }[]; t: BillingOverviewProps['t'] }) {
   return <div className="dsh-billing-list">
-    {summary.byProvider.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : summary.byProvider.map(item => (
-      <article className="dsh-billing-list-row" key={item.provider}>
-        <div><span className="dsh-billing-session-title">{findBalanceProvider(item.provider)?.name ?? item.provider}</span><TotalsCaption totals={item} t={t} /></div>
-        <div className="dsh-billing-list-value"><CostLabel totals={item} t={t} /><small>{t('billing.requestCount', { count: item.requests })}</small></div>
+    {items.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : items.map(item => (
+      <article className="dsh-billing-list-row" key={item.key}>
+        <div className="dsh-billing-row-main"><span className="dsh-billing-session-title" title={item.title}>{item.title}</span><TotalsCaption totals={item.totals} t={t} /></div>
+        <div className="dsh-billing-list-value"><CostLabel totals={item.totals} t={t} /><small>{t('billing.requestCount', { count: item.totals.requests })}</small></div>
       </article>
     ))}
   </div>
 }
 
 function UsageTables({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
-  return (
-    <div className="dsh-billing-table-grid">
-      <section className="dsh-billing-list-section"><h3>{t('billing.byProvider')}</h3><ProviderRows summary={summary} t={t} /></section>
-      <section className="dsh-billing-list-section">
-        <h3>{t('billing.byModel')}</h3>
-        <ModelRows summary={summary} t={t} />
-      </section>
-      <section className="dsh-billing-list-section">
-        <h3>{t('billing.bySession')}</h3>
-        {summary.bySession.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : (
-          <div className="dsh-billing-list">
-            {summary.bySession.map(item => (
-              <article className="dsh-billing-list-row" key={item.sessionId}>
-                <div>
-                  <span className="dsh-billing-session-title">{item.title}</span>
-                  <TotalsCaption totals={item} t={t} />
-                </div>
-                <div className="dsh-billing-list-value">
-                  <CostLabel totals={item} t={t} />
-                  <small>{t('billing.requestCount', { count: item.requests })}</small>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-      <section className="dsh-billing-list-section">
-        <h3>{t('billing.byDay')}</h3>
-        {summary.byDay.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : (
-          <div className="dsh-billing-list">
-            {summary.byDay.map(item => (
-              <article className="dsh-billing-list-row" key={item.date}>
-                <div>
-                  <span className="dsh-billing-session-title">{item.date}</span>
-                  <TotalsCaption totals={item} t={t} />
-                </div>
-                <div className="dsh-billing-list-value">
-                  <CostLabel totals={item} t={t} />
-                  <small>{t('billing.requestCount', { count: item.requests })}</small>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  )
+  const [category, setCategory] = useState<'model' | 'provider' | 'session' | 'day'>('model')
+  const rows: { key: string; title: string; totals: UsageTotals }[] = category === 'provider' ? summary.byProvider.map(item => ({ key: item.provider, title: findBalanceProvider(item.provider)?.name ?? item.provider, totals: item }))
+    : category === 'session' ? summary.bySession.map(item => ({ key: item.sessionId, title: item.title, totals: item }))
+      : summary.byDay.map(item => ({ key: item.date, title: item.date, totals: item }))
+  return <DetailPanel label={t('billing.categories')} value={category} onChange={setCategory} tabs={[
+    { value: 'model', label: t('billing.modelsLabel'), count: summary.byModel.length },
+    { value: 'provider', label: t('billing.providersLabel'), count: summary.byProvider.length },
+    { value: 'session', label: t('billing.sessionsLabel'), count: summary.bySession.length },
+    { value: 'day', label: t('billing.daysLabel'), count: summary.byDay.length },
+  ]}>
+    {category === 'model'
+      ? <PagedRows key="model" items={summary.byModel} t={t} render={items => <ModelRows items={items} summary={summary} t={t} />} />
+      : <PagedRows key={category} items={rows} t={t} render={items => <AggregateRows items={items} t={t} />} />}
+  </DetailPanel>
+}
+
+function SessionDetails({ result, t }: { result: UsageSessionSuccess; t: BillingOverviewProps['t'] }) {
+  const [category, setCategory] = useState<'model' | 'request'>('model')
+  const [model, setModel] = useState('')
+  const modelKey = (request: UsageRequestRecord) => JSON.stringify([request.provider ?? '', request.model ?? ''])
+  const models = [...new Map(result.requests.map(request => [modelKey(request), `${request.provider ?? '?'} / ${request.model ?? t('billing.unknownModel')}`])).entries()]
+  // A changing session or disappearing model must not leave an empty, stale filter.
+  const selectedModel = models.some(([key]) => key === model) ? model : ''
+  const requests = selectedModel === '' ? result.requests : result.requests.filter(request => modelKey(request) === selectedModel)
+  return <DetailPanel label={t('billing.sessionDetails')} value={category} onChange={setCategory} tabs={[
+    { value: 'model', label: t('billing.modelsLabel'), count: result.summary.byModel.length },
+    { value: 'request', label: t('billing.requestDetails'), count: result.requests.length },
+  ]} toolbar={category === 'request' ? <Dropdown label={t('billing.filterModel')} value={selectedModel} onChange={setModel}
+    options={[{ value: '', label: t('billing.allModels') }, ...models.map(([value, label]) => ({ value, label }))]} /> : undefined}>
+    {category === 'model'
+      ? <PagedRows key="model" items={result.summary.byModel} t={t} render={items => <ModelRows items={items} summary={result.summary} t={t} />} />
+      : <PagedRows key={`request:${selectedModel}`} items={requests} t={t} render={items => <RequestRows requests={items} t={t} />} />}
+  </DetailPanel>
 }
 
 function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[]; t: BillingOverviewProps['t'] }) {
@@ -216,17 +206,12 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
       {requests.map(request => (
         <article className="dsh-billing-request-row" key={request.seq}>
           <div>
-            <span>{new Date(request.time).toLocaleString(locale)}</span>
-            <code>{request.provider ?? '?'} / {request.model ?? t('billing.unknownModel')}</code>
+            <div className="dsh-billing-request-meta"><span>{new Date(request.time).toLocaleString(locale)}</span><span className="dsh-billing-provider-tag">{request.provider ?? '?'}</span></div>
+            <code className="dsh-billing-name" title={`${request.provider ?? '?'} / ${request.model ?? t('billing.unknownModel')}`}>{request.model ?? t('billing.unknownModel')}</code>
             {request.unknownReason !== undefined ? <small className="dsh-billing-secondary">{t(`billing.reason.${request.unknownReason}` as DshBalanceLocaleKey)}</small> : null}
           </div>
           <div>
-            <small className="dsh-billing-secondary">{t('billing.tokensBreakdown', {
-              input: formatTokens(request.inputTokens),
-              output: formatTokens(request.outputTokens),
-              cacheHit: formatTokens(request.cacheReadTokens),
-              cacheWrite: formatTokens(request.cacheWriteTokens),
-            })}</small>
+            <TotalsCaption totals={request} t={t} />
             <strong>{request.costCny !== undefined ? amount(request.costCny, 'CNY', locale) : request.costUsd === null ? t('billing.notPriced') : amount(request.costUsd, 'USD', locale)}</strong>
           </div>
         </article>
@@ -359,14 +344,7 @@ export function BillingView({ loadUsage, sessionId, useSession, useProjection, t
       {sessionResult !== undefined ? <>
         <SummaryCards summary={sessionResult.summary} t={t} />
         <p className="dsh-balance-meta">{t('billing.estimate')}</p>
-        <section className="dsh-billing-list-section">
-          <h3>{t('billing.byModel')}</h3>
-          <ModelRows summary={sessionResult.summary} t={t} />
-        </section>
-        <section className="dsh-billing-session-breakdown">
-          <h3>{t('billing.requestDetails')}</h3>
-          <RequestRows requests={sessionResult.requests} t={t} />
-        </section>
+        <SessionDetails key={sessionId} result={sessionResult} t={t} />
         <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(sessionResult.fetchedAt).toLocaleString(t('locale.tag')) })}{sessionResult.source === 'cache' ? t('meta.cached') : ''}</p>
       </> : null}
     </section>
