@@ -30,6 +30,65 @@ function response(): { value: () => Record<string, unknown>; result: ServerRespo
 }
 
 describe('usage Host route', () => {
+  it.each(['open', 'read', 'close'] as const)('keeps readable sessions when another session fails to %s and retries partial results', async (failureStage) => {
+    const good = makeSession()
+    const badId = SessionId('unreadable-session')
+    let broken = true
+    const close = vi.fn(async () => {})
+    const badClose = vi.fn(async () => {
+      if (broken && failureStage === 'close') throw new Error('private storage details')
+    })
+    const open = vi.fn(async (id: string) => {
+      if (id === badId && broken && failureStage === 'open') throw new Error('unsupported historical descriptor')
+      return {
+        id,
+        inheritedEventCount: 0,
+        read: async () => {
+          if (id === badId && broken && failureStage === 'read') throw new Error('private storage details')
+          return { events: good.events }
+        },
+        close: id === badId ? badClose : close,
+      }
+    })
+    let handler!: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+    const ctx = {
+      credentials: { resolve: vi.fn() },
+      sessionPersistence: {
+        list: async () => [
+          { header: good.header, revision: 'unchanged' },
+          { header: { ...good.header, id: badId }, revision: 'unchanged' },
+        ],
+        open,
+      },
+      webServer: { register: ({ path, handler: route }: { path: string; handler: typeof handler }) => {
+        if (path === '/dsh-balance/api/usage') handler = route
+      } },
+      effect: (factory: () => unknown) => factory(),
+      logger: { warn: vi.fn() },
+    } as unknown as Context
+    apply(ctx, { apiKeyRef: 'DEEPSEEK_API_KEY', baseUrl: 'https://api.deepseek.com', timeoutMs: 1000, cacheMs: 30_000, allowRemote: false })
+    const request = (query = '') => ({ method: 'GET', url: `/dsh-balance/api/usage?timeZone=UTC${query}`, headers: { host: '127.0.0.1' } }) as IncomingMessage
+    const partial = response()
+    await handler(request(), partial.result)
+    expect(partial.value()).toMatchObject({ ok: true, coverage: { readSessions: 1, skippedSessions: 1 }, summary: { totals: { requests: 1, inputTokens: 1_000_000 } } })
+    expect(JSON.stringify(partial.value())).not.toContain('private storage details')
+    expect(close).toHaveBeenCalledOnce()
+    if (failureStage !== 'open') expect(badClose).toHaveBeenCalledOnce()
+
+    const selected = response()
+    await handler(request('&scope=session&sessionId=unreadable-session'), selected.result)
+    expect(selected.value()).toMatchObject({ ok: false, code: 'UPSTREAM_UNAVAILABLE' })
+
+    broken = false
+    const recovered = response()
+    await handler(request(), recovered.result)
+    expect(recovered.value()).toMatchObject({ ok: true, source: 'live', coverage: { readSessions: 2, skippedSessions: 0 }, summary: { totals: { requests: 2, inputTokens: 2_000_000 } } })
+    const cached = response()
+    await handler(request(), cached.result)
+    expect(cached.value()).toMatchObject({ source: 'cache', coverage: { readSessions: 2, skippedSessions: 0 } })
+    expect(open).toHaveBeenCalledTimes(5)
+  })
+
   it('reads through a read-only handle, caches by revision, and invalidates after a revision change', async () => {
     const session = makeSession()
     let revision = 'r1'

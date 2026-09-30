@@ -327,6 +327,9 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
       </div>
       {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('billing.loading')}</p> : null}
       {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
+      {result?.ok === true && result.scope === 'all' && (result.coverage?.skippedSessions ?? 0) > 0
+        ? <p className="dsh-balance-status dsh-billing-coverage" role="status">{t('billing.skippedSessions', { count: result.coverage!.skippedSessions })}</p>
+        : null}
       {result?.ok === true && result.scope === 'all' ? <><SummaryCards summary={result.summary} t={t} /><Punchcard summary={result.summary} t={t} /><UsageTables summary={result.summary} t={t} /><p className="dsh-balance-meta">{t('billing.estimate')}</p><p className="dsh-balance-meta">{t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}</p></> : null}
     </section>
   )

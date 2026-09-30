@@ -152,6 +152,8 @@ export interface UsageAllSuccess {
   fetchedAt: string
   source: 'live' | 'cache'
   summary: UsageSummary
+  /** Unreadable sessions are excluded; partial totals must be labelled in the UI. */
+  coverage?: { readSessions: number; skippedSessions: number }
 }
 
 export interface UsageSessionSuccess {

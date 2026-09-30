@@ -332,20 +332,33 @@ export function apply(ctx: Context, config: Config): void {
         return
       }
 
-      const sources = await mapWithConcurrency(snapshots, 4, async (snapshot) => {
-        const handle = await ctx.sessionPersistence.open(snapshot.header.id, 'read')
+      const sessionReads = await mapWithConcurrency(snapshots, 4, async (snapshot) => {
         try {
-          const { events } = await handle.read()
-          return {
-            sessionId: String(handle.id),
-            title: sessionTitle(events, String(handle.id)),
-            inheritedEventCount: handle.inheritedEventCount,
-            events,
+          const handle = await ctx.sessionPersistence.open(snapshot.header.id, 'read')
+          try {
+            const { events } = await handle.read()
+            return {
+              sessionId: String(handle.id),
+              title: sessionTitle(events, String(handle.id)),
+              inheritedEventCount: handle.inheritedEventCount,
+              events,
+            }
+          } finally {
+            await handle.close()
           }
-        } finally {
-          await handle.close()
+        } catch {
+          if (query.scope === 'session') throw new Error('Selected session usage could not be read')
+          // One unsupported historical log must not hide the other sessions.
+          // Do not expose raw storage errors, which may include message content.
+          ctx.logger.warn(`Usage statistics excluded unreadable session ${String(snapshot.header.id)}`)
+          return undefined
         }
       })
+      const sources = sessionReads.filter(source => source !== undefined)
+      const coverage = { readSessions: sources.length, skippedSessions: snapshots.length - sources.length }
+      if (coverage.skippedSessions > 0 && coverage.readSessions === 0) {
+        throw new Error('No session usage could be read')
+      }
       const usdToCny = normalizeUsdToCny(config.usdToCny)
       const aggregateOptions: {
         timeZone: string
@@ -383,8 +396,10 @@ export function apply(ctx: Context, config: Config): void {
             fetchedAt,
             source: 'live',
             summary: aggregate.summary,
+            coverage,
           }
-      cachedUsage = { key: cacheKey, expiresAt: Date.now() + config.cacheMs, value }
+      // Retry partial reads on the next request, even when revisions have not changed.
+      cachedUsage = coverage.skippedSessions > 0 ? undefined : { key: cacheKey, expiresAt: Date.now() + config.cacheMs, value }
       sendJson(res, 200, value)
     } catch (error) {
       ctx.logger.warn(error)

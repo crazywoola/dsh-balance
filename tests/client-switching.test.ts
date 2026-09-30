@@ -181,6 +181,21 @@ it('shows all providers on the standalone page and refreshes saved statistics wh
   expect(loadUsage).toHaveBeenCalledTimes(2)
 })
 
+it('labels incomplete statistics and removes the notice after unreadable sessions recover', async () => {
+  const partial = usage(123)
+  if (!partial.ok || partial.scope !== 'all') throw new Error('invalid fixture')
+  partial.coverage = { readSessions: 37, skippedSessions: 3 }
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValueOnce(partial).mockResolvedValue(usage(456))
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  expect(JSON.stringify(root.toJSON())).toContain('3 sessions could not be read')
+  expect(JSON.stringify(root.toJSON())).toContain('The statistics below exclude these sessions')
+  expect(JSON.stringify(root.toJSON())).toContain('123')
+  await act(async () => { vi.advanceTimersByTime(15_000) })
+  expect(JSON.stringify(root.toJSON())).not.toContain('sessions could not be read')
+  expect(JSON.stringify(root.toJSON())).toContain('456')
+})
+
 it('clears previous conversation statistics and ignores their delayed response', async () => {
   const pending = deferred<UsageApiResponse>()
   const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockImplementationOnce(() => pending.promise).mockResolvedValue({ ok: false, code: 'SESSION_NOT_FOUND', message: 'session b' })

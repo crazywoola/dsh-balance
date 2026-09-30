@@ -30,6 +30,7 @@ export const balanceStyles = `
 .dsh-balance-refresh:focus-visible, .dsh-provider-switch button:focus-visible, .dsh-usage-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
 .dsh-balance-status, .dsh-balance-error { margin: 0; border: 1px solid var(--ledger-line); border-radius: var(--dsw-radius-lg, 12px); padding: 20px; background: var(--ledger-paper); color: var(--ledger-muted); font-size: 13px; line-height: 1.6; }
 .dsh-balance-error { border-left: 3px solid var(--dsw-alias-state-error-primary, #c33); }
+.dsh-billing-coverage { border-left: 3px solid var(--dsw-alias-state-warn-primary, #d99525); }
 .dsh-balance-error strong { color: var(--dsw-alias-state-error-primary, #c33); }
 .dsh-balance-error p { margin: 10px 0 0; }
 .dsh-balance-availability { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ledger-muted); }

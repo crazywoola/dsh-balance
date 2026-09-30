@@ -37,6 +37,8 @@ pnpm pack
 
 Usage reads the current read-only session handles and excludes fork-inherited events using `inheritedEventCount`. The conversation tab refreshes when token usage changes or a turn finishes.
 
+Global statistics skip sessions that the current dsh cannot read, such as unsupported historical formats or damaged logs, and show how many sessions were excluded. Partial results are retried on the next refresh without caching. An unreadable selected session, or a collection where every session fails to read, still reports an error instead of showing zero usage.
+
 ## Install
 
 ```bash
