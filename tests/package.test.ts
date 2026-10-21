@@ -7,11 +7,23 @@ const packageJson = JSON.parse(
   name?: unknown
   dsh?: { client?: { inject?: unknown[] } }
   peerDependencies?: Record<string, unknown>
+  devDependencies?: Record<string, unknown>
 }
 const cordisPatch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 const clientSource = readFileSync(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
 
 describe('published package metadata', () => {
+  it('targets DSH 0.2.1-rc.2 and builds against the same runtime packages', () => {
+    const dshPeers = Object.entries(packageJson.peerDependencies ?? {})
+      .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
+
+    expect(dshPeers).not.toHaveLength(0)
+    for (const [name, version] of dshPeers) {
+      expect(version, name).toBe('0.2.1-rc.2')
+      expect(packageJson.devDependencies?.[name], name).toBe(version)
+    }
+  })
+
   it('loads the scoped package from the Cordis patch', () => {
     expect(packageJson.name).toBe('@pinkbanana/dsh-balance')
     expect(cordisPatch).toContain("name: '@pinkbanana/dsh-balance'")

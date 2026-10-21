@@ -28,7 +28,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 
 ## 兼容性
 
-0.10.0 适配 DeepSeek Harness **0.2.0-rc.2**（[上游提交 639ed01](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)），需要 Node.js **22.19+（22.x）或 24+**。本次源码不再兼容 Harness 0.1 的接口。
+0.10.3 适配 DeepSeek Harness **0.2.1-rc.2**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.2`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
 
 也可在本地构建并打包源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
 
