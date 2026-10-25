@@ -26,7 +26,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Version 0.10.3 targets DeepSeek Harness **0.2.1-rc.2** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.2`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
+Version 0.11.0 targets DeepSeek Harness **0.2.1-rc.2** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.2`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
 
 To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 

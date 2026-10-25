@@ -47,8 +47,28 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), PEAK_TICK_MS)
-    return () => { window.clearInterval(timer) }
+    if (typeof document === 'undefined') {
+      const timer = setInterval(() => setNow(new Date()), PEAK_TICK_MS)
+      return () => clearInterval(timer)
+    }
+    let timer: number | undefined
+    const sync = () => {
+      setNow(new Date())
+      if (document.visibilityState === 'visible' && timer === undefined) {
+        timer = window.setInterval(() => setNow(new Date()), PEAK_TICK_MS)
+      } else if (document.visibilityState !== 'visible' && timer !== undefined) {
+        window.clearInterval(timer)
+        timer = undefined
+      }
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      if (timer !== undefined) window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('focus', sync)
+    }
   }, [])
 
   useEffect(() => {
@@ -68,10 +88,29 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
       })
     }
 
-    load()
-    const timer = window.setInterval(load, REFRESH_INTERVAL_MS)
+    if (typeof document === 'undefined') {
+      load()
+      const timer = setInterval(load, REFRESH_INTERVAL_MS)
+      return () => { clearInterval(timer); controller?.abort() }
+    }
+    let timer: number | undefined
+    const sync = () => {
+      if (document.visibilityState === 'visible') {
+        load()
+        if (timer === undefined) timer = window.setInterval(load, REFRESH_INTERVAL_MS)
+      } else if (timer !== undefined) {
+        window.clearInterval(timer)
+        timer = undefined
+        controller?.abort()
+      }
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('focus', sync)
     return () => {
-      window.clearInterval(timer)
+      if (timer !== undefined) window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('focus', sync)
       controller?.abort()
     }
   }, [loadBalance, provider])

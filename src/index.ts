@@ -106,11 +106,19 @@ function parseUsageQuery(requestUrl: URL): UsageQuery | UsageFailure {
 
   const from = requestUrl.searchParams.get('from') ?? undefined
   const to = requestUrl.searchParams.get('to') ?? undefined
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/
-  if ((from !== undefined && !datePattern.test(from)) || (to !== undefined && !datePattern.test(to))) {
-    return usageFailure('INVALID_REQUEST', 'from 和 to 必须是 YYYY-MM-DD')
+  const validDate = (value: string): boolean => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    if (match === null) return false
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+    return date.toISOString().slice(0, 10) === value
+  }
+  if ((from !== undefined && !validDate(from)) || (to !== undefined && !validDate(to))) {
+    return usageFailure('INVALID_REQUEST', 'from 和 to 必须是有效的 YYYY-MM-DD 日期')
   }
   if (from !== undefined && to !== undefined && from > to) return usageFailure('INVALID_REQUEST', 'from 不能晚于 to')
+
+  const rawProvider = requestUrl.searchParams.get('provider')
+  if (rawProvider !== null && rawProvider.trim().length === 0) return usageFailure('INVALID_REQUEST', 'provider 不能为空')
 
   return {
     scope,
@@ -119,7 +127,7 @@ function parseUsageQuery(requestUrl: URL): UsageQuery | UsageFailure {
     ...(from === undefined ? {} : { from }),
     ...(to === undefined ? {} : { to }),
     refresh: requestUrl.searchParams.get('refresh') === '1',
-    ...(requestUrl.searchParams.has('provider') ? { provider: requestUrl.searchParams.get('provider')!.trim() } : {}),
+    ...(rawProvider === null ? {} : { provider: rawProvider.trim() }),
   }
 }
 

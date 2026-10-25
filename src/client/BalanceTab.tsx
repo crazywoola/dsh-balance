@@ -14,23 +14,32 @@ export interface BalanceTabInjected {
 export type BalanceTabProps = BalanceTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: BalanceProviderId }
 
 function BalanceCard({ info, t }: { info: BalanceInfo; t: BalanceTabProps['t'] }) {
-  const details: [DshBalanceLocaleKey, string | undefined][] = [
+  const available: [DshBalanceLocaleKey, string | undefined][] = [
     ['balance.toppedUp', info.toppedUpBalance],
     ['balance.granted', info.grantedBalance],
+  ]
+  const cumulative: [DshBalanceLocaleKey, string | undefined][] = [
     ['balance.totalCash', info.totalCashBalance],
     ['balance.totalVoucher', info.totalVoucherBalance],
   ]
+  const renderRows = (rows: [DshBalanceLocaleKey, string | undefined][]) => rows
+    .filter(([, value]) => value !== undefined)
+    .map(([label, value]) => (
+      <div key={label}><dt>{t(label)}</dt><dd>{displayAmount(value!, info.currency, t('locale.tag'))}</dd></div>
+    ))
   return (
     <article className="dsh-balance-card">
       <div className="dsh-balance-card-head">
         <span>{t('balance.availableAmount')}</span><span className="dsh-balance-currency">{info.currency}</span>
       </div>
       <p className="dsh-balance-total">{displayAmount(info.totalBalance, info.currency, t('locale.tag'))}</p>
-      <dl className="dsh-balance-breakdown">
-        {details.filter(([, value]) => value !== undefined).map(([label, value]) => (
-          <div key={label}><dt>{t(label)}</dt><dd>{displayAmount(value!, info.currency, t('locale.tag'))}</dd></div>
-        ))}
-      </dl>
+      {available.some(([, value]) => value !== undefined) ? <dl className="dsh-balance-breakdown">{renderRows(available)}</dl> : null}
+      {cumulative.some(([, value]) => value !== undefined) ? (
+        <div>
+          <p className="dsh-balance-copy">{t('balance.totalsNote')}</p>
+          <dl className="dsh-balance-breakdown">{renderRows(cumulative)}</dl>
+        </div>
+      ) : null}
     </article>
   )
 }
@@ -90,7 +99,6 @@ export function BalanceSection({ loadBalance, t, provider = 'deepseek' }: Balanc
           {result.balanceInfos.length > 0
             ? <div className="dsh-balance-grid">{result.balanceInfos.map(info => <BalanceCard key={info.currency} info={info} t={t} />)}</div>
             : <p className="dsh-balance-status">{t('balance.empty')}</p>}
-          {result.accountType !== undefined ? <p className="dsh-balance-copy">{t('balance.totalsNote')}</p> : null}
           <div className="dsh-balance-footer"><p className="dsh-balance-meta">
             {t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}
           </p><span>{t('panel.private')}</span></div>

@@ -28,7 +28,10 @@ export function Punchcard({ summary, t }: PunchcardProps) {
     const next = key === 'ArrowRight' ? row * 24 + (col + 1) % 24 : key === 'ArrowLeft' ? row * 24 + (col + 23) % 24
       : key === 'ArrowDown' ? ((row + 1) % 7) * 24 + col : key === 'ArrowUp' ? ((row + 6) % 7) * 24 + col
         : key === 'Home' ? row * 24 : key === 'End' ? row * 24 + 23 : undefined
-    if (next !== undefined) svg.current?.querySelector<SVGCircleElement>(`[data-cell="${next}"]`)?.focus()
+    if (next !== undefined) {
+      setFocus(next)
+      svg.current?.querySelector<SVGCircleElement>(`[data-cell="${next}"]`)?.focus()
+    }
     return next !== undefined
   }
 
@@ -37,8 +40,8 @@ export function Punchcard({ summary, t }: PunchcardProps) {
       <div><h3 id={titleId}>{t('punchcard.title')}</h3><p>{t('punchcard.copy', { timeZone: summary.timeZone })}</p></div>
       <div className="dsh-punchcard-legend" aria-hidden="true"><span>{t('punchcard.less')}</span><i /><i /><i /><span>{t('punchcard.more')}</span></div>
     </div>
-    <div className="dsh-punchcard-scroll">
-      <svg ref={svg} viewBox="0 0 860 300" className="dsh-punchcard-chart" role="group" aria-label={t('punchcard.keyboard')}>
+    <div className="dsh-punchcard-scroll" tabIndex={0} role="region" aria-label={t('punchcard.keyboard')}>
+      <svg ref={svg} viewBox="0 0 860 300" preserveAspectRatio="xMinYMid meet" className="dsh-punchcard-chart" role="group" aria-label={t('punchcard.keyboard')}>
         {weekdays.map((day, index) => <g key={index}>
           <text x="0" y={48 + index * 34} className="dsh-punchcard-label">{day}</text>
           <line x1="68" x2="842" y1={44 + index * 34} y2={44 + index * 34} className="dsh-punchcard-line" />

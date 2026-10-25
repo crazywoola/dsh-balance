@@ -7,17 +7,17 @@ import type { BalanceTabInjected } from './BalanceTab.tsx'
 import type { LOCALE_NS } from './locales.ts'
 import { ModelsSection } from './ModelsTab.tsx'
 import type { ModelsTabInjected } from './ModelsTab.tsx'
-import { BillingOverview } from './BillingTab.tsx'
-import type { UsageTabInjected } from './BillingTab.tsx'
-
-export interface DeepSeekPanelInjected extends BalanceTabInjected, ModelsTabInjected, UsageTabInjected {}
+export interface DeepSeekPanelInjected extends BalanceTabInjected, ModelsTabInjected {
+  /** Retained for host injection compatibility; usage belongs to the dedicated usage view. */
+  loadUsage?: unknown
+}
 
 export type DeepSeekPanelProps = PropsRuntime<'settings.section'>
   & InjectFace<DeepSeekPanelInjected>
   & PropsLocale<typeof LOCALE_NS>
 
 /** Provider-neutral settings workspace. The exported name preserves existing integrations. */
-export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSeekPanelProps) {
+export function DeepSeekPanel({ loadBalance, loadModels, t }: DeepSeekPanelProps) {
   const [provider, setProvider] = useState<BalanceProviderId>('deepseek')
   return (
     <div className="dsh-deepseek-panel">
@@ -32,8 +32,6 @@ export function DeepSeekPanel({ loadBalance, loadModels, loadUsage, t }: DeepSee
       <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
       <div className="dsh-ledger-section-label"><span>{t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
       <ModelsSection key={`models-${provider}`} provider={provider} loadModels={loadModels} t={t} />
-      <div className="dsh-ledger-section-label"><span>{t('panel.activity')}</span></div>
-      <BillingOverview provider={provider} loadUsage={loadUsage} t={t} />
     </div>
   )
 }

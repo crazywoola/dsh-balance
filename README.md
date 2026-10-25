@@ -16,7 +16,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 - 在聊天框下方显示当前 provider、模型和余额，兼容模型选择器与 `/model` 切换
 - 从当前提供方的 `/models` 接口读取可用模型、所属组织与创建时间
 - 在设置页按所选 provider、模型、会话和日期查看实际 usage 消费，并在当前会话的“消费”Tab 查看请求明细
-- 缺少 provider usage、未知 provider 或未知模型时标记为“未计费”，不进行 token 估算
+- 明确区分已计费、免费（已知价格且费用为 0）与未计费请求；缺少 provider usage、未知 provider 或未知模型时不进行费用估算
 - 日期按浏览器 IANA 时区分组；DeepSeek 峰谷价格始终按北京时间计算
 - DeepSeek 费用显示 USD、StepFun 显示原生 CNY；配置 `usdToCny` 后显示人民币合计
 - 缓存查询结果并支持手动刷新
@@ -28,7 +28,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 
 ## 兼容性
 
-0.10.3 适配 DeepSeek Harness **0.2.1-rc.2**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.2`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
+0.11.0 适配 DeepSeek Harness **0.2.1-rc.2**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.2`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
 
 也可在本地构建并打包源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
 
@@ -87,7 +87,7 @@ providers:
 
 内置 DeepSeek 美元定价，以及 2026-09-30 核验的 [StepFun 官方人民币标准价](https://platform.stepfun.com/docs/zh/guides/pricing/details)：`step-5-preview`、`step-3.7-flash`、`step-3.5-flash` 和 `step-3.5-flash-2603`。StepFun 未缓存输入（含缓存写入）、缓存读取、输出分别计价，不套用 DeepSeek 峰谷倍率。费用是公开标准价估算，不代表账户实际账单；套餐、折扣和未保存的历史调价不包含在内。
 
-美元和原生人民币费用分别展示；设置 `usdToCny` 后，人民币合计才会包含美元折算金额。未知 provider / model 和缺失 usage 的请求保留请求数与 token，显示“未计费”；混合统计注明费用不完整。账户余额是实时查询值，与本地用量估算独立。会话消费页采用居中内容宽度、响应式外边距，并为底部输入框保留空间。
+美元和原生人民币费用分别展示；设置 `usdToCny` 后，人民币合计才会包含美元折算金额，并明确标为固定汇率换算。未设置汇率时，原生人民币金额不会被表述为包含美元费用的完整人民币合计。已知价格且费用为 0 的请求单列为“免费”；未知 provider / model 和缺失 usage 的请求保留请求数与 token，显示“未计费”。账户余额是实时查询值，与本地用量估算独立；赠送余额与充值余额分别展示，StepFun 的总充值/总赠送为累计值而非剩余余额。会话消费页采用居中内容宽度、响应式外边距，并为底部输入框保留空间。
 
 ## 扩展与设计
 

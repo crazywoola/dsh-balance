@@ -6,9 +6,9 @@ import type { UsageTabInjected } from './BillingTab.tsx'
 export type UsagePageProps = PropsRuntime<'main'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
 export function UsagePage({ loadUsage, t }: UsagePageProps) {
-  return <div className="dsh-usage-page"><div className="dsh-usage-content">
+  return <main className="dsh-usage-page" aria-label={t('nav.usage')}><div className="dsh-usage-content">
     <BillingOverview loadUsage={loadUsage} t={t} />
-  </div></div>
+  </div></main>
 }
 
 export function UsagePanelIcon({ size }: PropsRuntime<'sidebar.panellist'>) {

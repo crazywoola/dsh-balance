@@ -12,7 +12,7 @@ import { findBalanceProvider } from '../providers.ts'
 import { Punchcard } from './Punchcard.tsx'
 import { Dropdown } from './Dropdown.tsx'
 import { DetailPanel, PagedRows } from './BillingDetails.tsx'
-import { displayAmount } from './format.ts'
+import { displayAmount, displayTokens } from './format.ts'
 import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
 
 export interface UsageLoadOptions {
@@ -32,8 +32,8 @@ export interface UsageTabInjected {
 export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: string }
 export type BillingViewProps = PropsRuntime<'conversation.view'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
-function formatTokens(value: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
+function formatTokens(value: number, locale = 'en-US'): string {
+  return displayTokens(value, locale)
 }
 
 function amount(value: number | null, currency: 'USD' | 'CNY', locale: string): string {
@@ -61,6 +61,7 @@ function totalForDay(summary: UsageSummary, date: string): UsageTotals {
   return summary.byDay.find(item => item.date === date) ?? {
     requests: 0,
     pricedRequests: 0,
+    freeRequests: 0,
     unpricedRequests: 0,
     inputTokens: 0,
     outputTokens: 0,
@@ -70,26 +71,29 @@ function totalForDay(summary: UsageSummary, date: string): UsageTotals {
     costCny: summary.usdToCny === null ? null : 0,
     nativeCostCny: 0,
     cnyPricedRequests: 0,
+    hasCompleteCnyTotal: summary.usdToCny !== null,
   }
 }
 
 function ErrorMessage({ result, t }: { result: UsageApiResponse; t: BillingOverviewProps['t'] }) {
   if (result.ok === true) return null
   const key = `billing.error.${result.code}` as DshBalanceLocaleKey
-  return <p className="dsh-balance-error" role="alert">{t(key)}{result.message ? ` (${result.message})` : ''}</p>
+  const detail = result.code === 'SESSION_NOT_FOUND' && result.message ? ` (${result.message})` : ''
+  return <p className="dsh-balance-error" role="alert">{t(key)}{detail}</p>
 }
 
-function CostLabel({ totals, t, preferCny = false }: { totals: UsageTotals; t: BillingOverviewProps['t']; preferCny?: boolean }) {
+function CostLabel({ totals, t, cnyTotalMode = 'unavailable' }: { totals: UsageTotals; t: BillingOverviewProps['t']; cnyTotalMode?: UsageSummary['cnyTotalMode'] }) {
   const locale = t('locale.tag')
-  const unpriced = totals.requests > 0 && totals.pricedRequests === 0
-  const cnyOnly = totals.cnyPricedRequests > 0 && totals.pricedRequests === totals.cnyPricedRequests || totals.requests === 0 && preferCny
+  const freeRequests = totals.freeRequests ?? 0
+  const unpriced = totals.pricedRequests === 0 && freeRequests === 0 && totals.unpricedRequests > 0
+  const cnyOnly = totals.cnyPricedRequests > 0 && totals.pricedRequests === totals.cnyPricedRequests
   const mixed = totals.cnyPricedRequests > 0 && !cnyOnly
   return (
     <div className="dsh-billing-cost-value">
       <strong>{unpriced ? t('billing.notPriced') : cnyOnly ? amount(totals.nativeCostCny, 'CNY', locale) : amount(totals.costUsd, 'USD', locale)}</strong>
       {mixed ? <span>{amount(totals.nativeCostCny, 'CNY', locale)} {t('billing.nativeCny')}</span> : null}
       {totals.unpricedRequests > 0 && !unpriced ? <small>{t('billing.partial')}</small> : null}
-      {totals.costCny !== null && !unpriced && !cnyOnly && totals.costCny !== totals.nativeCostCny ? <span>{amount(totals.costCny, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
+      {totals.costCny !== null && totals.hasCompleteCnyTotal && !unpriced && !cnyOnly && cnyTotalMode === 'converted' ? <span>{amount(totals.costCny, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
     </div>
   )
 }
@@ -100,23 +104,23 @@ function SummaryCards({ summary, t }: { summary: UsageSummary; t: BillingOvervie
     <div className="dsh-billing-card-grid">
       <article className="dsh-billing-card dsh-billing-card-primary">
         <span>{t('billing.totalCost')}</span>
-        <CostLabel totals={summary.totals} t={t} />
-        <small>{t('billing.pricedRequests', { count: summary.totals.pricedRequests })}</small>
+        <CostLabel totals={summary.totals} t={t} cnyTotalMode={summary.cnyTotalMode} />
+        <small>{t('billing.pricedRequests', { count: summary.totals.pricedRequests })} · {t('billing.freeRequests' as DshBalanceLocaleKey, { count: summary.totals.freeRequests ?? 0 })}</small>
       </article>
       <article className="dsh-billing-card">
         <span>{t('billing.todayCost')}</span>
-        <CostLabel totals={today} t={t} preferCny={summary.totals.cnyPricedRequests > 0 && summary.totals.pricedRequests === summary.totals.cnyPricedRequests} />
+        <CostLabel totals={today} t={t} cnyTotalMode={summary.cnyTotalMode} />
         <small>{t('billing.today', { date: localDateKey(summary.timeZone) })}</small>
       </article>
       <article className="dsh-billing-card">
         <span>{t('billing.tokens')}</span>
-        <strong>{formatTokens(summary.totals.inputTokens + summary.totals.outputTokens + summary.totals.cacheReadTokens + summary.totals.cacheWriteTokens)}</strong>
+        <strong>{formatTokens(summary.totals.inputTokens + summary.totals.outputTokens + summary.totals.cacheReadTokens + summary.totals.cacheWriteTokens, t('locale.tag'))}</strong>
         <TotalsCaption totals={summary.totals} t={t} />
         <small>{t('billing.requestCount', { count: summary.totals.requests })}</small>
       </article>
       <article className="dsh-billing-card" data-warning={summary.totals.unpricedRequests > 0 ? 'true' : 'false'}>
         <span>{t('billing.unpriced')}</span>
-        <strong>{formatTokens(summary.totals.unpricedRequests)}</strong>
+        <strong>{formatTokens(summary.totals.unpricedRequests, t('locale.tag'))}</strong>
         <small>{t('billing.unpricedHint')}</small>
       </article>
     </div>
@@ -125,10 +129,10 @@ function SummaryCards({ summary, t }: { summary: UsageSummary; t: BillingOvervie
 
 function TotalsCaption({ totals, t }: { totals: Pick<UsageTotals, 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>; t: BillingOverviewProps['t'] }) {
   return <span className="dsh-billing-token-caption">
-    <span>{t('billing.inputShort')} <b>{formatTokens(totals.inputTokens)}</b></span>
-    <span>{t('billing.outputShort')} <b>{formatTokens(totals.outputTokens)}</b></span>
-    <span>{t('billing.cacheReadShort')} <b>{formatTokens(totals.cacheReadTokens)}</b></span>
-    {totals.cacheWriteTokens > 0 ? <span>{t('billing.cacheWriteShort')} <b>{formatTokens(totals.cacheWriteTokens)}</b></span> : null}
+    <span>{t('billing.inputShort')} <b>{formatTokens(totals.inputTokens, t('locale.tag'))}</b></span>
+    <span>{t('billing.outputShort')} <b>{formatTokens(totals.outputTokens, t('locale.tag'))}</b></span>
+    <span>{t('billing.cacheReadShort')} <b>{formatTokens(totals.cacheReadTokens, t('locale.tag'))}</b></span>
+    {totals.cacheWriteTokens > 0 ? <span>{t('billing.cacheWriteShort')} <b>{formatTokens(totals.cacheWriteTokens, t('locale.tag'))}</b></span> : null}
   </span>
 }
 
@@ -204,7 +208,7 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
   return (
     <div className="dsh-billing-request-list">
       {requests.map(request => (
-        <article className="dsh-billing-request-row" key={request.seq}>
+        <article className="dsh-billing-request-row" key={request.seq} data-billing-status={request.billingStatus}>
           <div>
             <div className="dsh-billing-request-meta"><span>{new Date(request.time).toLocaleString(locale)}</span><span className="dsh-billing-provider-tag">{request.provider ?? '?'}</span></div>
             <code className="dsh-billing-name" title={`${request.provider ?? '?'} / ${request.model ?? t('billing.unknownModel')}`}>{request.model ?? t('billing.unknownModel')}</code>
@@ -212,7 +216,7 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
           </div>
           <div>
             <TotalsCaption totals={request} t={t} />
-            <strong>{request.costCny !== undefined ? amount(request.costCny, 'CNY', locale) : request.costUsd === null ? t('billing.notPriced') : amount(request.costUsd, 'USD', locale)}</strong>
+            <strong>{request.billingStatus === 'free' ? t('billing.free' as DshBalanceLocaleKey) : request.billingStatus === 'unpriced' ? t('billing.notPriced') : request.costCny !== undefined ? amount(request.costCny, 'CNY', locale) : amount(request.costUsd, 'USD', locale)}</strong>
           </div>
         </article>
       ))}

@@ -75,6 +75,7 @@ export interface BillingUsage {
 }
 
 export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unknown-model' | 'missing-request-metadata'
+export type BillingStatus = 'priced' | 'free' | 'unpriced'
 
 export interface UsageRequestRecord {
   sessionId: string
@@ -91,6 +92,8 @@ export interface UsageRequestRecord {
   cacheReadTokens: number
   cacheWriteTokens: number
   costUsd: number | null
+  /** Explicit settlement classification. Zero-cost known prices are free, not unpriced. */
+  billingStatus: BillingStatus
   /** Native CNY estimate; kept separate from USD without inventing an exchange rate. */
   costCny?: number
   pricingVersion?: string
@@ -100,6 +103,7 @@ export interface UsageRequestRecord {
 export interface UsageTotals {
   requests: number
   pricedRequests: number
+  freeRequests: number
   unpricedRequests: number
   inputTokens: number
   outputTokens: number
@@ -109,6 +113,8 @@ export interface UsageTotals {
   costCny: number | null
   nativeCostCny: number
   cnyPricedRequests: number
+  /** True only when every priced USD request is included in costCny. */
+  hasCompleteCnyTotal: boolean
 }
 
 export interface UsageProviderAggregate extends UsageTotals {
@@ -138,6 +144,8 @@ export interface UsageSessionAggregate extends UsageTotals {
 export interface UsageSummary {
   timeZone: string
   usdToCny: number | null
+  /** Describes whether CNY totals are native-only or include converted USD. */
+  cnyTotalMode: 'unavailable' | 'native-only' | 'converted'
   totals: UsageTotals
   byProvider: UsageProviderAggregate[]
   byModel: UsageModelAggregate[]
@@ -193,6 +201,7 @@ interface RequestContext {
 interface MutableTotals {
   requests: number
   pricedRequests: number
+  freeRequests: number
   unpricedRequests: number
   inputTokens: number
   outputTokens: number
@@ -212,6 +221,7 @@ function emptyTotals(): MutableTotals {
   return {
     requests: 0,
     pricedRequests: 0,
+    freeRequests: 0,
     unpricedRequests: 0,
     inputTokens: 0,
     outputTokens: 0,
@@ -225,7 +235,8 @@ function emptyTotals(): MutableTotals {
 
 function addTotals(target: MutableTotals, record: UsageRequestRecord): void {
   target.requests += 1
-  if (record.costUsd === null && record.costCny === undefined) target.unpricedRequests += 1
+  if (record.billingStatus === 'unpriced') target.unpricedRequests += 1
+  else if (record.billingStatus === 'free') target.freeRequests += 1
   else {
     target.pricedRequests += 1
     target.costUsd += record.costUsd ?? 0
@@ -248,6 +259,7 @@ function toTotals(value: MutableTotals, usdToCny: number | null): UsageTotals {
     costUsd,
     nativeCostCny,
     costCny: usdToCny === null && value.cnyPricedRequests === 0 ? null : roundMoney(nativeCostCny + costUsd * (usdToCny ?? 0)),
+    hasCompleteCnyTotal: usdToCny !== null || costUsd === 0,
   }
 }
 
@@ -392,6 +404,7 @@ export function extractSessionUsage(
     let costUsd: number | null = null
     let costCny: number | undefined
     let pricingVersion: string | undefined
+    let billingStatus: BillingStatus = 'unpriced'
     let unknownReason: BillingUnknownReason | undefined
     if (usage === undefined) unknownReason = 'missing-usage'
     else if (provider === null || model === null) unknownReason = 'missing-request-metadata'
@@ -403,6 +416,7 @@ export function extractSessionUsage(
         if (price.currency === 'CNY') costCny = cost
         else costUsd = cost
         pricingVersion = price.pricingVersion
+        billingStatus = cost === 0 ? 'free' : 'priced'
       }
     }
 
@@ -420,6 +434,7 @@ export function extractSessionUsage(
       cacheReadTokens,
       cacheWriteTokens,
       costUsd,
+      billingStatus,
       ...(costCny === undefined ? {} : { costCny }),
       ...(pricingVersion === undefined ? {} : { pricingVersion }),
       ...(unknownReason === undefined ? {} : { unknownReason }),
@@ -493,6 +508,7 @@ function aggregateRecords(
   const summary: UsageSummary = {
     timeZone,
     usdToCny,
+    cnyTotalMode: usdToCny !== null ? 'converted' : totals.cnyPricedRequests > 0 ? 'native-only' : 'unavailable',
     totals: toTotals(totals, usdToCny),
     byProvider: [...providers.values()].map(toAggregate),
     byModel: [...models.values()].map(value => ({ ...toAggregate(value), provider: value.provider, model: value.model })),

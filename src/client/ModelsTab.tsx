@@ -62,8 +62,13 @@ export function ModelsSection({ loadModels, t, provider = 'deepseek' }: ModelsTa
         </button>
       </div>
 
-      {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('models.loading')}</p> : null}
-      {result?.ok === false ? <p className="dsh-balance-error" role="alert">{t(errorLocaleKey(result.code))}</p> : null}
+      {loading && result === undefined ? <div className="dsh-balance-skeleton" role="status"><span>{t('models.loading')}</span><i /><i /></div> : null}
+      {result?.ok === false ? (
+        <div className="dsh-balance-error" role="alert">
+          <strong>{providerName} / {t(errorLocaleKey(result.code))}</strong>
+          {result.code === 'MISSING_API_KEY' ? <p>{t(provider === 'deepseek' ? 'balance.setupDeepSeek' : 'balance.setup', { provider: providerName, ref: findBalanceProvider(provider)!.apiKeyRef })}</p> : null}
+        </div>
+      ) : null}
       {result?.ok === true ? (
         <>
           <div className="dsh-model-count">

@@ -104,8 +104,8 @@ describe('live composer selection', () => {
 })
 
 function usage(inputTokens: number): UsageApiResponse {
-  const totals: UsageTotals = { requests: 1, pricedRequests: 0, unpricedRequests: 1, inputTokens, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 40, costUsd: 0, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0 }
-  return { ok: true, scope: 'all', fetchedAt: new Date().toISOString(), source: 'live', summary: { timeZone: 'UTC', usdToCny: null, totals, byWeekdayHour: [], byProvider: [], byDay: [], bySession: [], byModel: [] } }
+  const totals: UsageTotals = { requests: 1, pricedRequests: 0, freeRequests: 0, unpricedRequests: 1, inputTokens, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 40, costUsd: 0, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0, hasCompleteCnyTotal: true }
+  return { ok: true, scope: 'all', fetchedAt: new Date().toISOString(), source: 'live', summary: { timeZone: 'UTC', usdToCny: null, cnyTotalMode: 'unavailable', totals, byWeekdayHour: [], byProvider: [], byDay: [], bySession: [], byModel: [] } }
 }
 
 it('filters statistics by provider, cancels refreshes on changes, and includes cached tokens in the total', async () => {
@@ -229,7 +229,7 @@ it('shows one category at a time, paginates long lists, and clamps the page afte
 it('filters and paginates session requests while preserving full model identifiers', async () => {
   const base = usage(10)
   if (!base.ok || base.scope !== 'all') throw new Error('invalid fixture')
-  const requests = Array.from({ length: 24 }, (_, index) => ({ sessionId: 'a', inputTokens: 10, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 0, costUsd: null, seq: index, time: new Date().toISOString(), turn: 1, step: index, provider: 'deepseek', model: index % 2 === 0 ? 'very-long-model-identifier-a' : 'model-b' }))
+  const requests = Array.from({ length: 24 }, (_, index) => ({ sessionId: 'a', inputTokens: 10, outputTokens: 20, cacheReadTokens: 30, cacheWriteTokens: 0, costUsd: null, billingStatus: 'unpriced' as const, seq: index, time: new Date().toISOString(), turn: 1, step: index, provider: 'deepseek', model: index % 2 === 0 ? 'very-long-model-identifier-a' : 'model-b' }))
   const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue({ ok: true, scope: 'session', fetchedAt: new Date().toISOString(), source: 'live', summary: base.summary, session: { ...base.summary.totals, sessionId: 'a', title: 'a' }, requests })
   const props = { sessionId: 'a', t, loadUsage, useSession: () => false, useProjection: () => ({}) } as BillingViewProps
   let root!: ReactTestRenderer

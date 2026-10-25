@@ -21,7 +21,7 @@ export function DetailPanel<T extends string>({ label, tabs, value, onChange, to
     <div className="dsh-billing-detail-header">
       <div className="dsh-billing-detail-tabs" role="tablist" aria-label={label}>
         {tabs.map((tab, index) => <button key={tab.value} ref={element => { buttons.current[index] = element }}
-          type="button" role="tab" id={`${id}-${tab.value}`} aria-controls={`${id}-panel`}
+          type="button" role="tab" id={`${id}-${tab.value}`} aria-controls={`${id}-${tab.value}-panel`}
           aria-selected={value === tab.value} tabIndex={value === tab.value ? 0 : -1}
           onClick={() => onChange(tab.value)} onKeyDown={event => {
             const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
@@ -41,7 +41,7 @@ export function DetailPanel<T extends string>({ label, tabs, value, onChange, to
       </div>
       {toolbar ? <div className="dsh-billing-detail-tools">{toolbar}</div> : null}
     </div>
-    <div className="dsh-billing-detail-body" role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${value}`} tabIndex={0}>
+    <div className="dsh-billing-detail-body" role="tabpanel" id={`${id}-${value}-panel`} aria-labelledby={`${id}-${value}`} tabIndex={0}>
       {children}
     </div>
   </section>

@@ -68,9 +68,9 @@ describe('extractSessionUsage', () => {
     ]
     const records = extractSessionUsage('session-a', inheritedEventCount, events, utcOptions)
     expect(records).toHaveLength(3)
-    expect(records[0]).toMatchObject({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 2, cacheWriteTokens: 3, costUsd: 0.000006174 })
-    expect(records[1]).toMatchObject({ costUsd: null, unknownReason: 'unknown-provider' })
-    expect(records[2]).toMatchObject({ costUsd: null, unknownReason: 'missing-usage' })
+    expect(records[0]).toMatchObject({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 2, cacheWriteTokens: 3, costUsd: 0.000006174, billingStatus: 'priced' })
+    expect(records[1]).toMatchObject({ costUsd: null, unknownReason: 'unknown-provider', billingStatus: 'unpriced' })
+    expect(records[2]).toMatchObject({ costUsd: null, unknownReason: 'missing-usage', billingStatus: 'unpriced' })
   })
 
   it('skips inherited fork events before inheritedEventCount while retaining their request header', () => {
@@ -112,6 +112,27 @@ describe('aggregateBilling', () => {
     expect(summary.bySession).toHaveLength(2)
     expect(summary.byModel).toHaveLength(2)
     expect(summary.bySession.reduce((total, item) => total + item.costUsd, 0)).toBe(summary.totals.costUsd)
+  })
+
+  it('classifies known zero-cost usage as free instead of unpriced', () => {
+    const events = [requestHeader(0, '2026-08-17T00:00:00Z'), stepStart(1), assistant(2, { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 })]
+    const aggregate = aggregateBilling([{ sessionId: 'free', title: 'Free', inheritedEventCount, events }], { ...utcOptions, usdToCny: 7 })
+    expect(aggregate.requestsBySession.get('free')?.[0]).toMatchObject({ billingStatus: 'free', costUsd: 0 })
+    expect(aggregate.summary.totals).toMatchObject({ requests: 1, pricedRequests: 0, freeRequests: 1, unpricedRequests: 0, hasCompleteCnyTotal: true })
+  })
+
+  it('describes native-only versus converted CNY totals without overclaiming completeness', () => {
+    const at = '2026-10-01T00:00:00Z'
+    const sources = [
+      { sessionId: 'usd', title: 'USD', inheritedEventCount, events: [requestHeader(0, at), stepStart(1, 1, 0, at), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 })] },
+      { sessionId: 'cny', title: 'CNY', inheritedEventCount, events: [requestHeader(0, at, 'stepfun', 'step-5-preview'), stepStart(1, 1, 0, at), assistant(2, { inputTokens: 1_000_000, outputTokens: 0 })] },
+    ]
+    const native = aggregateBilling(sources, utcOptions).summary
+    expect(native.cnyTotalMode).toBe('native-only')
+    expect(native.totals.hasCompleteCnyTotal).toBe(false)
+    const converted = aggregateBilling(sources, { ...utcOptions, usdToCny: 7 }).summary
+    expect(converted.cnyTotalMode).toBe('converted')
+    expect(converted.totals.hasCompleteCnyTotal).toBe(true)
   })
 
   it('accepts only a positive finite fixed USD to CNY rate', () => {
