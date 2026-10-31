@@ -215,7 +215,10 @@ export const balanceStyles = `
 .dsh-balance-dock {
   box-sizing: border-box;
   display: block;
-  width: 100%;
+  /* Content-sized: this entry shares conversation.composer.dock with the
+     shipped stats pills and the context meter, so claiming the full row width
+     squeezed them until they ellipsized. */
+  width: auto;
   max-width: var(--dsh-chat-content-width);
   margin: 0 auto;
   padding: 4px calc(var(--dsh-composer-side-clearance, 0px) + 16px) 0;
