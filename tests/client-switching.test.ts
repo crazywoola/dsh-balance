@@ -274,3 +274,18 @@ it('renders native CNY estimates without presenting them as zero USD and retains
   expect(totalCost.findByType('strong').children.join('')).not.toContain('$0.00')
   expect(JSON.stringify(root.toJSON())).toContain('Requests with known pricing only')
 })
+
+it('recognizes Tokener in the composer without requesting an undocumented balance API', async () => {
+  const loadBalance = vi.fn<BalanceDockInjected['loadBalance']>().mockResolvedValue(balance('12'))
+  const selection = directory()
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BalanceDock, dockProps(selection, loadBalance))); roots.push(root) })
+  await act(async () => { selection.select('TOKENER.AI', 'gpt-5.4') })
+  expect(JSON.stringify(root.toJSON())).toContain('Tokener usage')
+  expect(JSON.stringify(root.toJSON())).toContain('See Usage Statistics')
+  expect(JSON.stringify(root.toJSON())).toContain('gpt-5.4')
+  expect(JSON.stringify(root.toJSON())).not.toContain('$12.00')
+  await act(async () => { vi.advanceTimersByTime(60_000) })
+  expect(loadBalance).toHaveBeenCalledOnce()
+  expect(root.root.findByProps({ className: 'dsh-balance-dock-dot' }).props['data-state']).toBe('unknown')
+})

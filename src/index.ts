@@ -202,6 +202,10 @@ export function apply(ctx: Context, config: Config): void {
       sendJson(res, 400, { ok: false, code: 'UNSUPPORTED_PROVIDER', message: '不支持此提供方的余额查询' })
       return
     }
+    if (!provider.supportsBalance) {
+      sendJson(res, 400, { ok: false, code: 'BALANCE_NOT_SUPPORTED', message: '此提供方尚未公开余额查询 API，请在官方控制台查看余额' })
+      return
+    }
     const settings = providerConfigs.get(provider.id)!
     const forceRefresh = requestUrl.searchParams.get('refresh') === '1'
     const cached = balanceCache.get(provider.id)

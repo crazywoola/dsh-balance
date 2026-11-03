@@ -72,7 +72,7 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
   }, [])
 
   useEffect(() => {
-    if (provider === undefined) return
+    if (provider === undefined || !findBalanceProvider(provider)?.supportsBalance) return
     let controller: AbortController | undefined
 
     const load = () => {
@@ -118,6 +118,7 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
   const summary = useMemo(() => {
     if (providerName === undefined) return t('dock.noSelection')
     if (provider === undefined) return t('error.UNSUPPORTED_PROVIDER')
+    if (!findBalanceProvider(provider)?.supportsBalance) return t('dock.usageOnly')
     if (result === undefined) return t('dock.loading')
     if (!result.ok) return t('dock.unavailable')
     if (result.balanceInfos.length === 0) return t('dock.empty')
@@ -126,14 +127,15 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
       .join(' · ')
   }, [result, t, provider, providerName])
 
-  const state = provider === undefined ? 'unknown'
+  const state = provider === undefined || !findBalanceProvider(provider)?.supportsBalance ? 'unknown'
     : result === undefined ? 'loading'
       : !result.ok ? 'error'
         : result.isAvailable === null ? 'unknown'
           : result.isAvailable ? 'available' : 'empty'
   const accessibleState = result?.ok === true && result.isAvailable !== null
     ? t(result.isAvailable ? 'balance.available' : 'balance.unavailable') : undefined
-  const label = providerName === undefined ? t('nav.balance') : t('dock.label', { provider: providerName })
+  const label = providerName === undefined ? t('nav.balance')
+    : t(provider !== undefined && !findBalanceProvider(provider)?.supportsBalance ? 'dock.usageLabel' : 'dock.label', { provider: providerName })
 
   const pricingActive = provider === 'deepseek' && now.getTime() >= PEAK_EFFECTIVE_FROM
   const isPeak = pricingActive && isPeakHour(now)

@@ -31,6 +31,7 @@ export interface BalanceSuccess extends BalancePayload {
 
 export type ApiErrorCode =
   | 'UNSUPPORTED_PROVIDER'
+  | 'BALANCE_NOT_SUPPORTED'
   | 'FORBIDDEN'
   | 'INVALID_API_KEY'
   | 'INVALID_RESPONSE'

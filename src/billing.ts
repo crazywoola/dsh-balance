@@ -1,6 +1,7 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { findBalanceProvider } from './providers.ts'
 import { isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
+import { TOKENER_PRICES, TOKENER_PRICING_VERSION } from './tokener-pricing.ts'
 
 export const USAGE_ROUTE = '/dsh-balance/api/usage'
 export const BILLING_PRICING_VERSION = 'deepseek-v4-2026-08-17'
@@ -65,6 +66,11 @@ export const BILLING_PRICES: readonly BillingPrice[] = [
     provider: 'stepfun', model, currency: 'CNY' as const,
     effectiveFrom: new Date(0).toISOString(), pricingVersion: 'stepfun-reference-2026-09-30', ...rates,
   })),
+  ...Object.entries(TOKENER_PRICES).map(([model, [input, cacheRead, output]]) => ({
+    provider: 'tokener', model,
+    effectiveFrom: new Date(0).toISOString(), pricingVersion: TOKENER_PRICING_VERSION,
+    cacheMissUsdPerMillion: input, cacheHitUsdPerMillion: cacheRead, outputUsdPerMillion: output,
+  })),
 ]
 
 export interface BillingUsage {
@@ -74,7 +80,7 @@ export interface BillingUsage {
   cacheWriteTokens: number
 }
 
-export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unknown-model' | 'missing-request-metadata'
+export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unknown-model' | 'missing-request-metadata' | 'unknown-cache-write-price'
 export type BillingStatus = 'priced' | 'free' | 'unpriced'
 
 export interface UsageRequestRecord {
@@ -306,8 +312,9 @@ function messageMetadata(event: SessionEvent): { provider: string; model: string
 
 /** Resolve the versioned price for one request. */
 export function resolveBillingPrice(provider: string, model: string, time: number): BillingPrice | undefined {
-  if (findBalanceProvider(provider)?.id === 'stepfun') return BILLING_PRICES.find(price => price.provider === 'stepfun' && price.model === model)
-  if (findBalanceProvider(provider)?.id !== 'deepseek') return undefined
+  const providerId = findBalanceProvider(provider)?.id
+  if (providerId === 'stepfun' || providerId === 'tokener') return BILLING_PRICES.find(price => price.provider === providerId && price.model === model)
+  if (providerId !== 'deepseek') return undefined
   const canonicalModel = model === 'deepseek-chat' || model === 'deepseek-reasoner'
     ? (time >= PEAK_EFFECTIVE_FROM ? 'deepseek-v4-flash' : model)
     : model
@@ -411,6 +418,7 @@ export function extractSessionUsage(
     else {
       const price = resolveBillingPrice(provider, model, time)
       if (price === undefined) unknownReason = findBalanceProvider(provider) !== undefined ? 'unknown-model' : 'unknown-provider'
+      else if (provider === 'tokener' && usage.cacheWriteTokens > 0) unknownReason = 'unknown-cache-write-price'
       else {
         const cost = calculateRequestCost(usage, price, time)
         if (price.currency === 'CNY') costCny = cost

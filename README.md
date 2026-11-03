@@ -2,9 +2,9 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供方的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
+DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 DeepSeek / StepFun / Tokener 的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
-界面使用 Harness 原生侧栏、主页面和主题变量。侧栏“插件”下方新增“用量统计”，独立查看所有对话的提供方、模型、会话和日期统计；默认显示全部提供方与全部时间，支持提供方和日期范围筛选。活动打卡图按浏览器时区的星期 × 24 小时汇总请求次数，圆点大小随次数变化；悬停或使用方向键可查看请求数与 token 明细。选择器采用主题化浮层菜单，支持方向键、Home/End、Enter、Escape 和按名称检索。设置页支持 DeepSeek / StepFun 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
+界面使用 Harness 原生侧栏、主页面和主题变量。侧栏“插件”下方新增“用量统计”，独立查看所有对话的提供方、模型、会话和日期统计；默认显示全部提供方与全部时间，支持提供方和日期范围筛选。活动打卡图按浏览器时区的星期 × 24 小时汇总请求次数，圆点大小随次数变化；悬停或使用方向键可查看请求数与 token 明细。选择器采用主题化浮层菜单，支持方向键、Home/End、Enter、Escape 和按名称检索。设置页支持 DeepSeek / StepFun / Tokener 切换。运行 `pnpm preview` 可查看使用示例数据的新版界面。
 
 聊天框底部会跟随当前会话所选的提供方与模型更新余额；设置页可独立切换提供方。
 
@@ -12,6 +12,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 
 - DeepSeek：查看总余额、充值余额和赠送余额
 - StepFun：查看可用余额、总充值金额、总赠送金额及预付费 / 后付费账户类型
+- Tokener：按提供方、模型、会话、日期统计本地请求和 token，以公开目录价估算美元费用；通过官方 `/v1/models` 查询模型
 - 提供方独立缓存；支持大小写不敏感的 Provider ID
 - 在聊天框下方显示当前 provider、模型和余额，兼容模型选择器与 `/model` 切换
 - 从当前提供方的 `/models` 接口读取可用模型、所属组织与创建时间
@@ -28,7 +29,9 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额、各提供
 
 ## 兼容性
 
-0.11.0 适配 DeepSeek Harness **0.2.1-rc.2**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.2`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
+0.12.0 适配 DeepSeek Harness **0.2.1-rc.5**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.5)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.5`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
+
+新版 dsh 会在安装及启动时校验插件兼容版本。旧插件锁定 `rc.2`，会被 `rc.5` 拒绝加载；请升级到插件 `0.12.0`，无需添加版本豁免。仍使用 dsh `0.2.1-rc.2` 的用户请保留插件 `0.11.0`。
 
 也可在本地构建并打包源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
 
@@ -48,6 +51,7 @@ pnpm pack
 ## 安装
 
 ```bash
+npm install -g @deepseek-ai/dsh@latest
 dsh plugin --profile web add @pinkbanana/dsh-balance@latest
 dsh --profile web
 ```
@@ -80,6 +84,23 @@ providers:
 已有的顶层 `apiKeyRef` / `baseUrl` 继续用于 DeepSeek；`providers` 覆盖对应提供方的余额与模型查询。配置不读取自定义模型的 Base URL，默认查询官方 API。余额、可用模型与设置页统计随所选提供方切换。聊天框摘要使用当前会话的实时选择；会话“消费”保留该会话历史上所有 provider 的用量。
 
 模型列表按 [StepFun 列表 API](https://platform.stepfun.com/docs/zh/api-reference/models/list) 请求 `GET /v1/models`，解析 [Model 对象](https://platform.stepfun.com/docs/zh/api-reference/models/object) 的 `id`、`owned_by`、`created`（秒级 Unix 时间戳）。列表已包含这些信息，不需要逐个调用单模型详情接口。Host 路由为 `GET /dsh-balance/api/models?provider=StepFun`，模型缓存按 provider 隔离，`refresh=1` 强制刷新。
+
+## Tokener 配置与统计
+
+在“设置 → 模型”中添加自定义提供方，Provider ID 使用 `Tokener`（大小写不限，也支持 `tokener.ai`），Base URL 使用 `https://api.tokener.ai/v1`，并保存 API Key。插件默认使用 `TOKENER_API_KEY`，也支持 `providers` 配置覆盖：
+
+```yaml
+providers:
+  - id: tokener
+    apiKeyRef: TOKENER_API_KEY
+    baseUrl: https://api.tokener.ai/v1
+```
+
+根据 [Tokener API 文档](https://www.tokener.ai/zh/docs/reference/api-endpoint)，可用模型由 Host 使用 Bearer 认证查询 `/v1/models`，密钥不发送到浏览器。文档没有公开 API Key 可访问的余额或组织用量接口，因此设置页提供控制台入口，聊天框提示查看“用量统计”，不尝试未知端点。
+
+统计仅覆盖当前 dsh 保存的本地会话，不包含其他客户端或整个组织的调用，也不提供 API Key 维度。请求数、输入、输出、缓存读取与缓存写入按 dsh 标准化的 usage 统计；缓存读取已从标准化输入中拆出，不重复计数。支持提供方、模型、会话、日期和活动时段明细，提供方别名统一归为 Tokener。
+
+内置 2026-11-03 核验的 [Tokener 模型目录](https://www.tokener.ai/zh/models) 对话/推理模型美元参考价，逐个匹配完整模型 ID。使用 Tokener 目录价格，不套用原厂价格或 DeepSeek 峰谷倍率。参考价快照同样用于已有历史记录的估算，不代表历史实际扣款。未知模型、缺少 usage，以及包含未公开价格的缓存写入请求，保留请求数与 token 并标为“未计费”。账户余额、折扣和实际消费以 [Tokener 控制台](https://console.tokener.ai) 为准。
 
 ## 统计口径
 

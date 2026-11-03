@@ -2,9 +2,9 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
-A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, available provider models, and multidimensional usage costs. The API key is used only by the local Host and is never sent to the browser.
+A DeepSeek Harness plugin for checking DeepSeek / StepFun API balances, plus available models and multidimensional usage costs for DeepSeek / StepFun / Tokener. The API key is used only by the local Host and is never sent to the browser.
 
-The redesigned account ledger switches between DeepSeek and StepFun. Run `pnpm preview` to explore it with sample data.
+The redesigned account ledger switches between DeepSeek, StepFun, and Tokener. Run `pnpm preview` to explore it with sample data.
 
 The composer readout follows the current session’s provider and model. The Settings provider selection is independent.
 
@@ -12,6 +12,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 - DeepSeek: total, topped-up, and granted balances
 - StepFun: available balance, total cash credited, total vouchers granted, and prepaid / postpaid account type
+- Tokener: local requests/tokens grouped by provider, model, session and date, USD estimates from its published catalog, and models from `/v1/models`
 - Independent provider caches and case-insensitive Provider IDs
 - Show the current provider, model, and balance below the composer, following both the selector and `/model`
 - Fetch available models, owners, and creation dates from the selected provider’s `/models` API
@@ -26,7 +27,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Version 0.11.0 targets DeepSeek Harness **0.2.1-rc.2** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.2`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
+Version 0.12.0 targets DeepSeek Harness **0.2.1-rc.5** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.5)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.5`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
 
 To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 
@@ -46,6 +47,7 @@ Usage breakdowns use counted tabs for models, providers, sessions, and dates, wi
 ## Install
 
 ```bash
+npm install -g @deepseek-ai/dsh@latest
 dsh plugin --profile web add @pinkbanana/dsh-balance@latest
 dsh --profile web
 ```
@@ -59,6 +61,25 @@ usdToCny: 7.2
 ```
 
 Both the official provider ID `deepseek-official` and legacy `deepseek` are supported case-insensitively and share DeepSeek credentials, balance caches, and model caches. The composer retains the actual model ID, such as `deepseek-flash`; new models with unknown pricing remain unpriced.
+
+## Tokener configuration and usage
+
+Add a custom provider in Settings → Models with ID `Tokener` (case-insensitive; `tokener.ai` is also accepted), base URL `https://api.tokener.ai/v1`, and your API key. The default credential reference is `TOKENER_API_KEY`; it can be overridden:
+
+```yaml
+providers:
+  - id: tokener
+    apiKeyRef: TOKENER_API_KEY
+    baseUrl: https://api.tokener.ai/v1
+```
+
+The Host queries the documented `GET /v1/models` with Bearer authentication; credentials never reach the browser. [Tokener's API documentation](https://www.tokener.ai/zh/docs/reference/api-endpoint) does not publish an API-key balance or organization-usage endpoint. Settings link to the console, and the composer points to Usage Statistics without querying an undocumented endpoint.
+
+Statistics cover locally saved dsh sessions only, not other clients or organization-wide usage, and do not group by API key. Requests and tokens are grouped by provider, model, session, date and activity hour. DSH usage already separates cache reads from uncached input; the plugin does not count them twice.
+
+Conversation/reasoning model estimates use the [Tokener model catalog](https://www.tokener.ai/zh/models) USD reference snapshot checked on 2026-11-03, matching exact model IDs without vendor rates or DeepSeek peak multipliers. This snapshot also estimates older records; it does not reconstruct historical charges. Unknown models, missing usage, and requests with unpublished cache-write pricing retain their requests/tokens but stay unpriced. Account balances and actual bills remain in the [Tokener console](https://console.tokener.ai).
+
+New dsh versions validate compatibility before installation and startup. Plugin `0.11.0` declares `rc.2` peers and is rejected on `rc.5`; upgrade to `0.12.0` without a version exemption. Keep plugin `0.11.0` if you remain on dsh `0.2.1-rc.2`.
 
 ## StepFun setup
 

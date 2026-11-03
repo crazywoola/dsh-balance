@@ -29,7 +29,13 @@ export function DeepSeekPanel({ loadBalance, loadModels, t }: DeepSeekPanelProps
           <button key={item.id} type="button" aria-pressed={provider === item.id} onClick={() => setProvider(item.id)}>{item.name}</button>
         ))}
       </div>
-      <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
+      {findBalanceProvider(provider)!.supportsBalance
+        ? <BalanceSection key={`balance-${provider}`} provider={provider} loadBalance={loadBalance} t={t} />
+        : <section className="dsh-balance-section">
+          <h2 className="dsh-balance-heading">{t('balance.title', { provider: 'Tokener' })}</h2>
+          <p className="dsh-balance-copy">{t('tokener.account')}</p>
+          <a href="https://console.tokener.ai" target="_blank" rel="noreferrer">{t('tokener.console')}</a>
+        </section>}
       <div className="dsh-ledger-section-label"><span>{t('panel.models')}</span><span>{findBalanceProvider(provider)!.name}</span></div>
       <ModelsSection key={`models-${provider}`} provider={provider} loadModels={loadModels} t={t} />
     </div>

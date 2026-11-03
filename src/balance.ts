@@ -76,7 +76,7 @@ export function parseStepFunBalance(value: unknown): BalancePayload {
 }
 
 /** Add a provider's endpoint and parser here; transport and error handling are shared. */
-const adapters: Record<BalanceProviderId, { path: string; parse: (value: unknown) => BalancePayload }> = {
+const adapters: Partial<Record<BalanceProviderId, { path: string; parse: (value: unknown) => BalancePayload }>> = {
   deepseek: { path: 'user/balance', parse: parseDeepSeekBalance },
   stepfun: { path: 'accounts', parse: parseStepFunBalance },
 }
@@ -106,6 +106,7 @@ export async function queryProviderBalance(providerId: string, options: QueryBal
   const provider = findBalanceProvider(providerId)
   if (provider === undefined) throw new BalanceQueryError('UNSUPPORTED_PROVIDER', '不支持此提供方的余额查询', 400)
   const adapter = adapters[provider.id]
+  if (adapter === undefined) throw new BalanceQueryError('BALANCE_NOT_SUPPORTED', '此提供方尚未公开余额查询 API，请在官方控制台查看余额', 400)
   const baseUrl = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`
 
   const fetchImpl = options.fetchImpl ?? fetch

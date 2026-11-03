@@ -299,3 +299,45 @@ describe('native StepFun CNY billing', () => {
     expect(aggregateBilling(sources, { ...utcOptions, provider: 'stepfun' }).summary.totals).toMatchObject({ costUsd: 0, costCny: 27.35, pricedRequests: 1 })
   })
 })
+
+describe('Tokener usage', () => {
+  const at = '2026-11-03T01:00:00Z' // Beijing peak hours must not change gateway rates.
+  const eventsFor = (provider: string, model: string, usage: unknown) => [
+    requestHeader(0, at, provider, model), stepStart(1, 1, 0, at), assistant(2, usage, 1, 0, at),
+  ]
+
+  it('uses Tokener catalog prices, not the model vendor prices or peak multiplier', () => {
+    const price = resolveBillingPrice('TOKENER.AI', 'deepseek-v4-pro', time(at))!
+    expect(price).toMatchObject({ provider: 'tokener', pricingVersion: 'tokener-reference-2026-11-03' })
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    expect(calculateRequestCost(usage, price, time(at))).toBe(5.324)
+    expect(calculateRequestCost(usage, price, time('2026-11-03T00:00:00Z'))).toBe(5.324)
+    expect(resolveBillingPrice('tokener', 'deepseek-chat', time(at))).toBeUndefined()
+  })
+
+  it('aggregates aliases, preserves disjoint cached tokens, and supports provider/date filtering', () => {
+    const sources = ['Tokener', 'TOKENER.AI', 'deepseek'].map((provider, i) => ({
+      sessionId: String(i), title: `Session ${i}`, inheritedEventCount: 0,
+      events: eventsFor(provider, 'deepseek-flash', { inputTokens: 600, cacheReadTokens: 400, outputTokens: 100 }),
+    }))
+    // DSH has already subtracted cache-read tokens from prompt tokens: 600 + 400 = 1000.
+    const { summary, requestsBySession } = aggregateBilling(sources, { timeZone: 'Asia/Shanghai', provider: ' tokener.ai ', from: '2026-11-03', to: '2026-11-03', usdToCny: 7 })
+    expect(summary.totals).toMatchObject({ requests: 2, pricedRequests: 2, inputTokens: 1200, cacheReadTokens: 800, outputTokens: 200, costUsd: 0.0006048, costCny: 0.0042336 })
+    expect(summary.byProvider).toHaveLength(1)
+    expect(summary.byProvider[0]?.provider).toBe('tokener')
+    expect(summary.bySession).toHaveLength(2)
+    expect(summary.byModel[0]?.model).toBe('deepseek-flash')
+    expect(summary.byDay[0]?.date).toBe('2026-11-03')
+    expect(summary.byWeekdayHour[0]).toMatchObject({ weekday: 2, hour: 9, requests: 2 })
+    expect(requestsBySession.get('0')?.[0]).toMatchObject({ billingStatus: 'priced', costUsd: 0.0003024 })
+    expect(aggregateBilling(sources, { timeZone: 'UTC', from: '2026-11-04' }).summary.totals.requests).toBe(0)
+  })
+
+  it('preserves unknown models and unpublished cache writes as unpriced, not free', () => {
+    const unknown = extractSessionUsage('unknown', 0, eventsFor('tokener', 'private-model', { inputTokens: 10, outputTokens: 2, cacheReadTokens: 5 }), utcOptions)
+    expect(unknown[0]).toMatchObject({ provider: 'tokener', inputTokens: 10, cacheReadTokens: 5, costUsd: null, billingStatus: 'unpriced', unknownReason: 'unknown-model' })
+    const writes = extractSessionUsage('writes', 0, eventsFor('tokener', 'claude-sonnet-4-6', { inputTokens: 10, outputTokens: 2, cacheWriteTokens: 100 }), utcOptions)
+    expect(writes[0]).toMatchObject({ cacheWriteTokens: 100, costUsd: null, billingStatus: 'unpriced', unknownReason: 'unknown-cache-write-price' })
+    expect(extractSessionUsage('missing', 0, eventsFor('tokener', 'gpt-5.4', undefined), utcOptions)[0]?.unknownReason).toBe('missing-usage')
+  })
+})
