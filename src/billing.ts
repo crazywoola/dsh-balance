@@ -345,19 +345,24 @@ export function calculateRequestCost(usage: BillingUsage, price: BillingPrice, t
   ) / TOKENS_PER_MILLION * multiplier)
 }
 
-function dateKey(time: number, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
+function dateFormatter(timeZone: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date(time))
+  })
+}
+
+function dateKey(time: number, formatter: Intl.DateTimeFormat): string {
+  const parts = formatter.formatToParts(new Date(time))
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
   return `${values.year ?? '0000'}-${values.month ?? '00'}-${values.day ?? '00'}`
 }
 
-function inDateRange(time: number, timeZone: string, from: string | undefined, to: string | undefined): boolean {
-  const day = dateKey(time, timeZone)
+function inDateRange(time: number, formatter: Intl.DateTimeFormat, from: string | undefined, to: string | undefined): boolean {
+  if (from === undefined && to === undefined) return true
+  const day = dateKey(time, formatter)
   return (from === undefined || day >= from) && (to === undefined || day <= to)
 }
 
@@ -456,9 +461,10 @@ export function extractSessionUsage(
     }
   }
 
+  const dates = dateFormatter(options.timeZone)
   return records.filter(record =>
     (options.provider === undefined || record.provider === (findBalanceProvider(options.provider)?.id ?? options.provider))
-    && inDateRange(Date.parse(record.time), options.timeZone, options.from, options.to),
+    && inDateRange(Date.parse(record.time), dates, options.from, options.to),
   )
 }
 
@@ -473,6 +479,7 @@ function aggregateRecords(
   const models = new Map<string, MutableTotals & { provider: string; model: string }>()
   const hours = new Map<string, MutableTotals & { weekday: number; hour: number }>()
   const clock = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: '2-digit', hourCycle: 'h23' })
+  const dates = dateFormatter(timeZone)
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const days = new Map<string, MutableTotals & { date: string }>()
   const sessions = new Map<string, MutableTotals & { sessionId: string; title: string }>()
@@ -497,7 +504,7 @@ function aggregateRecords(
     addTotals(hourTotal, record)
     hours.set(hourKey, hourTotal)
 
-    const day = dateKey(Date.parse(record.time), timeZone)
+    const day = dateKey(Date.parse(record.time), dates)
     const dayTotal = days.get(day) ?? { ...emptyTotals(), date: day }
     addTotals(dayTotal, record)
     days.set(day, dayTotal)
@@ -547,16 +554,40 @@ export interface BillingSource {
   events: readonly SessionEvent[]
 }
 
+/** Compact request metadata only: never retain message bodies or tool output. */
+export interface BillingRecordsSource {
+  sessionId: string
+  title: string
+  records: readonly UsageRequestRecord[]
+}
+
 /** Aggregate one or many sessions for the settings page or session view. */
 export function aggregateBilling(
   sources: readonly BillingSource[],
   options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number },
 ): { summary: UsageSummary; requestsBySession: ReadonlyMap<string, UsageRequestRecord[]> } {
+  return aggregateBillingRecords(sources.map(source => ({
+    sessionId: source.sessionId,
+    title: source.title,
+    records: extractSessionUsage(source.sessionId, source.inheritedEventCount, source.events, { timeZone: options.timeZone }),
+  })), options)
+}
+
+/** Filter cached request metadata without re-reading complete conversation logs. */
+export function aggregateBillingRecords(
+  sources: readonly BillingRecordsSource[],
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number },
+): { summary: UsageSummary; requestsBySession: ReadonlyMap<string, UsageRequestRecord[]> } {
   const records: UsageRequestRecord[] = []
   const titles = new Map<string, string>()
+  const provider = options.provider === undefined ? undefined : (findBalanceProvider(options.provider)?.id ?? options.provider)
+  const dates = dateFormatter(options.timeZone)
   for (const source of sources) {
     titles.set(source.sessionId, source.title)
-    records.push(...extractSessionUsage(source.sessionId, source.inheritedEventCount, source.events, options))
+    for (const record of source.records) {
+      if ((provider === undefined || record.provider === provider)
+        && inDateRange(Date.parse(record.time), dates, options.from, options.to)) records.push(record)
+    }
   }
   const aggregate = aggregateRecords(records, titles, options.timeZone, options.usdToCny ?? null)
   return {

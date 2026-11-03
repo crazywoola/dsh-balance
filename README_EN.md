@@ -27,7 +27,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Version 0.12.0 targets DeepSeek Harness **0.2.1-rc.5** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.5)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.5`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
+Version 0.12.1 targets DeepSeek Harness **0.2.1-rc.5** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.5)). Use Node.js **22.19+ (22.x) or 24+**. All DSH peer and development dependencies are pinned to `0.2.1-rc.5`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
 
 To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 
@@ -38,11 +38,13 @@ pnpm pack
 
 Usage reads the current read-only session handles and excludes fork-inherited events using `inheritedEventCount`. The conversation tab refreshes when token usage changes or a turn finishes.
 
-Global statistics skip sessions that the current dsh cannot read, such as unsupported historical formats or damaged logs, and show how many sessions were excluded. Partial results are retried on the next refresh without caching. An unreadable selected session, or a collection where every session fails to read, still reports an error instead of showing zero usage.
+Global statistics skip sessions that the current dsh cannot read, such as unsupported historical formats or damaged logs, and show how many sessions were excluded. Partial summaries are retried on the next refresh; unchanged successful sessions reuse compact usage records while failed sessions are retried. An unreadable selected session, or a collection where every session fails to read, still reports an error instead of showing zero usage.
 
 Usage breakdowns use counted tabs for models, providers, sessions, and dates, with a themed category selector on narrow screens. Lists default to 10 rows per page, with 5 / 10 / 20 options. The conversation page separates model summaries and requests, and requests can be filtered by model. Long names are truncated with their full value available on hover.
 
 ![Tabbed breakdown and pagination](./docs/dsh-usage-tabs.jpg)
+
+Since `0.12.1`, usage queries read one session log at a time across all HTTP requests, extract compact request metadata, and release the full log before continuing. Concurrent reads of the same session are shared. Unchanged successful sessions reuse revision-keyed usage records even when another session is unreadable; explicit refresh re-reads logs. Cached records exclude message bodies and tool output, preventing full-history retention and overlapping scans from exhausting the JavaScript heap.
 
 ## Install
 
@@ -79,7 +81,7 @@ Statistics cover locally saved dsh sessions only, not other clients or organizat
 
 Conversation/reasoning model estimates use the [Tokener model catalog](https://www.tokener.ai/zh/models) USD reference snapshot checked on 2026-11-03, matching exact model IDs without vendor rates or DeepSeek peak multipliers. This snapshot also estimates older records; it does not reconstruct historical charges. Unknown models, missing usage, and requests with unpublished cache-write pricing retain their requests/tokens but stay unpriced. Account balances and actual bills remain in the [Tokener console](https://console.tokener.ai).
 
-New dsh versions validate compatibility before installation and startup. Plugin `0.11.0` declares `rc.2` peers and is rejected on `rc.5`; upgrade to `0.12.0` without a version exemption. Keep plugin `0.11.0` if you remain on dsh `0.2.1-rc.2`.
+New dsh versions validate compatibility before installation and startup. Plugin `0.11.0` declares `rc.2` peers and is rejected on `rc.5`; upgrade to `0.12.1` without a version exemption. Keep plugin `0.11.0` if you remain on dsh `0.2.1-rc.2`.
 
 ## StepFun setup
 

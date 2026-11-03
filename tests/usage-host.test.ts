@@ -86,7 +86,8 @@ describe('usage Host route', () => {
     const cached = response()
     await handler(request(), cached.result)
     expect(cached.value()).toMatchObject({ source: 'cache', coverage: { readSessions: 2, skippedSessions: 0 } })
-    expect(open).toHaveBeenCalledTimes(5)
+    // Successful unchanged logs are reused; only the failed log is retried.
+    expect(open).toHaveBeenCalledTimes(4)
   })
 
   it('reads through a read-only handle, caches by revision, and invalidates after a revision change', async () => {

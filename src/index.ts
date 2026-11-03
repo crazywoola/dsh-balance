@@ -5,7 +5,8 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import z from '@deepseek-ai/schemastery'
 import { BalanceQueryError, queryProviderBalance } from './balance.ts'
-import { aggregateBilling, assertTimeZone, normalizeUsdToCny, USAGE_ROUTE } from './billing.ts'
+import { aggregateBillingRecords, assertTimeZone, normalizeUsdToCny, USAGE_ROUTE } from './billing.ts'
+import { UsageReader } from './usage-reader.ts'
 import { ModelQueryError, queryProviderModels } from './models.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
 import { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
@@ -131,16 +132,6 @@ function parseUsageQuery(requestUrl: URL): UsageQuery | UsageFailure {
   }
 }
 
-function sessionTitle(events: readonly { type: string; data: unknown }[], fallback: string): string {
-  let title = fallback
-  for (const event of events) {
-    if (event.type !== 'session/title' || typeof event.data !== 'object' || event.data === null || Array.isArray(event.data)) continue
-    const value = (event.data as Record<string, unknown>).title
-    if (typeof value === 'string' && value.trim().length > 0) title = value
-  }
-  return title
-}
-
 async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const result: R[] = []
   let next = 0
@@ -184,6 +175,7 @@ export function apply(ctx: Context, config: Config): void {
   const balanceCache = new Map<string, { expiresAt: number; value: BalanceSuccess }>()
   const modelsCache = new Map<string, { expiresAt: number; value: ModelsSuccess }>()
   let cachedUsage: { key: string; expiresAt: number; value: UsageAllSuccess | UsageSessionSuccess } | undefined
+  const usageReader = new UsageReader(ctx.sessionPersistence)
 
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (req.method !== 'GET') {
@@ -325,9 +317,11 @@ export function apply(ctx: Context, config: Config): void {
     const query = parsedQuery
 
     try {
+      const allSnapshots = await ctx.sessionPersistence.list()
+      usageReader.prune(allSnapshots)
       const snapshots = query.scope === 'session'
-        ? (await ctx.sessionPersistence.list()).filter(snapshot => String(snapshot.header.id) === query.sessionId)
-        : await ctx.sessionPersistence.list()
+        ? allSnapshots.filter(snapshot => String(snapshot.header.id) === query.sessionId)
+        : allSnapshots
       if (query.scope === 'session' && snapshots.length === 0) {
         sendJson(res, 404, usageFailure('SESSION_NOT_FOUND', '找不到指定会话'))
         return
@@ -346,18 +340,7 @@ export function apply(ctx: Context, config: Config): void {
 
       const sessionReads = await mapWithConcurrency(snapshots, 4, async (snapshot) => {
         try {
-          const handle = await ctx.sessionPersistence.open(snapshot.header.id, 'read')
-          try {
-            const { events } = await handle.read()
-            return {
-              sessionId: String(handle.id),
-              title: sessionTitle(events, String(handle.id)),
-              inheritedEventCount: handle.inheritedEventCount,
-              events,
-            }
-          } finally {
-            await handle.close()
-          }
+          return await usageReader.read(snapshot, query.refresh)
         } catch {
           if (query.scope === 'session') throw new Error('Selected session usage could not be read')
           // One unsupported historical log must not hide the other sessions.
@@ -383,7 +366,7 @@ export function apply(ctx: Context, config: Config): void {
       if (query.from !== undefined) aggregateOptions.from = query.from
       if (query.to !== undefined) aggregateOptions.to = query.to
       if (usdToCny !== undefined) aggregateOptions.usdToCny = usdToCny
-      const aggregate = aggregateBilling(sources, aggregateOptions)
+      const aggregate = aggregateBillingRecords(sources, aggregateOptions)
       const fetchedAt = new Date().toISOString()
       const value: UsageAllSuccess | UsageSessionSuccess = query.scope === 'session'
         ? (() => {
