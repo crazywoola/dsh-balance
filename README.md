@@ -29,9 +29,9 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 De
 
 ## 兼容性
 
-0.12.1 适配 DeepSeek Harness **0.2.1-rc.5**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.5)），需要 Node.js **22.19+（22.x）或 24+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.1-rc.5`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
+0.13.0 适配 DeepSeek Harness **0.2.2-rc.1**（[上游版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1)），需要 Node.js **24.9+**。所有 DSH peer 依赖和开发依赖均锁定为 `0.2.2-rc.1`，Cordis 使用 `~4.1.0`。Harness `0.2.0-rc.2` 用户请继续使用插件 `0.10.2`；本次源码不再兼容 Harness 0.1 的接口。
 
-新版 dsh 会在安装及启动时校验插件兼容版本。旧插件锁定 `rc.2`，会被 `rc.5` 拒绝加载；请升级到插件 `0.12.1`，无需添加版本豁免。仍使用 dsh `0.2.1-rc.2` 的用户请保留插件 `0.11.0`。
+新版 dsh 会在安装及启动时校验插件兼容版本。插件 `0.12.1` 锁定 `0.2.1-rc.5`，会被 dsh `0.2.2-rc.1` 拒绝加载；请升级到插件 `0.13.0` 并重启 Harness，无需添加版本豁免。仍使用 dsh `0.2.1-rc.5` 的用户请保留插件 `0.12.1`；dsh `0.2.1-rc.2` 用户请保留插件 `0.11.0`。
 
 也可在本地构建并打包源码，再用 `dsh plugin --profile web add /absolute/path/to/package.tgz` 安装生成的 `.tgz` 文件，随后重启 Harness：
 

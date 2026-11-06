@@ -13,13 +13,13 @@ const cordisPatch = readFileSync(new URL('../cordis.patch.yml', import.meta.url)
 const clientSource = readFileSync(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
 
 describe('published package metadata', () => {
-  it('targets DSH 0.2.1-rc.5 and builds against the same runtime packages', () => {
+  it('targets DSH 0.2.2-rc.1 and builds against the same runtime packages', () => {
     const dshPeers = Object.entries(packageJson.peerDependencies ?? {})
       .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
 
     expect(dshPeers).not.toHaveLength(0)
     for (const [name, version] of dshPeers) {
-      expect(version, name).toBe('0.2.1-rc.5')
+      expect(version, name).toBe('0.2.2-rc.1')
       expect(packageJson.devDependencies?.[name], name).toBe(version)
     }
   })
