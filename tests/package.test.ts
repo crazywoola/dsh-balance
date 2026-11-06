@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { satisfies, valid } from 'semver'
 import { describe, expect, it } from 'vitest'
 
 const packageJson = JSON.parse(
@@ -6,21 +7,58 @@ const packageJson = JSON.parse(
 ) as {
   name?: unknown
   dsh?: { client?: { inject?: unknown[] } }
-  peerDependencies?: Record<string, unknown>
-  devDependencies?: Record<string, unknown>
+  engines?: { dsh?: string }
+  peerDependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
 }
 const cordisPatch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 const clientSource = readFileSync(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
+const dshPeers = Object.entries(packageJson.peerDependencies ?? {})
+  .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
+const dshRanges = [
+  ['engines.dsh', packageJson.engines?.dsh ?? ''],
+  ...dshPeers,
+] as const
+// DSH's compatibility gate opts prereleases into semver range matching.
+const dshSemverOptions = { includePrerelease: true }
 
 describe('published package metadata', () => {
-  it('targets DSH 0.2.2-rc.1 and builds against the same runtime packages', () => {
-    const dshPeers = Object.entries(packageJson.peerDependencies ?? {})
-      .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))
-
+  it('keeps reproducible development pins within the declared runtime range', () => {
+    expect(packageJson.engines?.dsh).toBeTruthy()
     expect(dshPeers).not.toHaveLength(0)
-    for (const [name, version] of dshPeers) {
-      expect(version, name).toBe('0.2.2-rc.1')
-      expect(packageJson.devDependencies?.[name], name).toBe(version)
+    for (const [name, range] of dshPeers) {
+      const version = packageJson.devDependencies?.[name] ?? ''
+      expect(range, name).toBe(packageJson.engines?.dsh)
+      expect(valid(version), name).toBe(version)
+      expect(satisfies(version, range, dshSemverOptions), name).toBe(true)
+    }
+  })
+
+  it.each([
+    '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2',
+    '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1', '0.3.0', '0.9.0-rc.1', '0.99.0',
+  ])('admits DSH %s without an exact-version exemption', (version) => {
+    for (const [name, range] of dshRanges) {
+      expect(satisfies(version, range, dshSemverOptions), name).toBe(true)
+    }
+  })
+
+  it.each([
+    '0.1.0', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0',
+    '1.0.0-alpha.1', '1.0.0-rc.1', '1.0.0', '2.0.0',
+  ])('keeps DSH %s outside the supported range', (version) => {
+    for (const [name, range] of dshRanges) {
+      expect(satisfies(version, range, dshSemverOptions), name).toBe(false)
+    }
+  })
+
+  it('accepts later Cordis 4.x versions while retaining the 4.1 minimum', () => {
+    const range = packageJson.peerDependencies?.['@deepseek-ai/cordis'] ?? ''
+    for (const version of ['4.1.0', '4.1.1', '4.2.0', '4.99.0']) {
+      expect(satisfies(version, range), version).toBe(true)
+    }
+    for (const version of ['4.0.5', '5.0.0']) {
+      expect(satisfies(version, range), version).toBe(false)
     }
   })
 

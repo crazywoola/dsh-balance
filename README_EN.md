@@ -27,7 +27,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Version 0.13.0 targets DeepSeek Harness **0.2.2-rc.1** ([upstream release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1)). Use Node.js **24.9+**. All DSH peer and development dependencies are pinned to `0.2.2-rc.1`, with Cordis `~4.1.0`. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
+Starting with 0.13.1, the plugin declares the broad DSH range **`>=0.2.2-rc.1 <1.0.0-0`**. Use Node.js **24.9+**. `engines.dsh` and every DSH peer use the same range. DSH includes prereleases in its compatibility checks, so later 0.x RCs, patches, and minor versions are not rejected solely because their version changed. The Cordis peer range is `^4.1.0`. Development dependencies remain pinned to DSH `0.2.2-rc.1` and Cordis `~4.1.0` for reproducible builds. Runtime validation covers [DSH 0.2.2-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1); the broad declaration does not mean future versions have been runtime-tested, and upstream API changes may still require adaptation. Harness `0.2.0-rc.2` users should keep plugin `0.10.2`; Harness 0.1 APIs are no longer supported by this checkout.
 
 To install from source, build and pack it locally, then pass the generated `.tgz` path to `dsh plugin --profile web add /absolute/path/to/package.tgz` and restart Harness:
 
@@ -81,7 +81,7 @@ Statistics cover locally saved dsh sessions only, not other clients or organizat
 
 Conversation/reasoning model estimates use the [Tokener model catalog](https://www.tokener.ai/zh/models) USD reference snapshot checked on 2026-11-03, matching exact model IDs without vendor rates or DeepSeek peak multipliers. This snapshot also estimates older records; it does not reconstruct historical charges. Unknown models, missing usage, and requests with unpublished cache-write pricing retain their requests/tokens but stay unpriced. Account balances and actual bills remain in the [Tokener console](https://console.tokener.ai).
 
-New dsh versions validate compatibility before installation and startup. Plugin `0.12.1` declares `0.2.1-rc.5` peers and is rejected on dsh `0.2.2-rc.1`; upgrade to plugin `0.13.0` and restart Harness. No version exemption is required. Keep plugin `0.12.1` on dsh `0.2.1-rc.5`, or plugin `0.11.0` on dsh `0.2.1-rc.2`.
+New dsh versions validate compatibility before installation and startup. Older plugin releases pin exact DSH versions and can be rejected after a DSH upgrade; update to plugin `0.13.1` and restart Harness. No version exemption is required within the declared range. Versions below `0.2.2-rc.1`, and 1.0.0 prereleases or newer, remain outside the range. Keep plugin `0.12.1` on dsh `0.2.1-rc.5`, or plugin `0.11.0` on dsh `0.2.1-rc.2`.
 
 ## StepFun setup
 
