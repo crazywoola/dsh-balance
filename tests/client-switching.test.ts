@@ -5,7 +5,7 @@ import type { ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BalanceDock } from '../src/client/BalanceDock.tsx'
 import type { BalanceDockInjected, BalanceDockProps } from '../src/client/BalanceDock.tsx'
-import { BillingOverview, BillingView, isDateValue, monthProjection, PeriodComparison, primaryMetric, resolveUsageDates, shiftDate } from '../src/client/BillingTab.tsx'
+import { BillingOverview, BillingView, isDateValue, monthProjection, PeriodComparison, primaryMetric, readStoredRate, resolveUsageDates, shiftDate, writeStoredRate } from '../src/client/BillingTab.tsx'
 import { Dropdown } from '../src/client/Dropdown.tsx'
 import type { BillingViewProps, UsageLoadOptions, UsageTabInjected } from '../src/client/BillingTab.tsx'
 import { BalanceSection } from '../src/client/BalanceTab.tsx'
@@ -126,7 +126,7 @@ it('filters statistics by provider, cancels refreshes on changes, and includes c
   expect(cards).toContain('100') // 10 uncached + 20 output + 30 cache read + 40 cache write
   expect(cards).toContain('Unpriced')
   expect(cards).not.toContain('1,089')
-  act(() => root.root.findByProps({ className: 'dsh-balance-refresh' }).props.onClick())
+  act(() => root.root.findByProps({ 'aria-label': 'Refresh usage' }).props.onClick())
   await act(async () => { root.update(createElement(BillingOverview, { provider: 'deepseek', loadUsage, t })) })
   expect(loadUsage.mock.calls[2]?.[1].aborted).toBe(true)
   await act(async () => { refresh.resolve(usage(999)) })
@@ -430,4 +430,102 @@ it('flags a low balance in the composer dock', async () => {
   await act(async () => { root = create(createElement(BalanceDock, dockProps(selection, loadBalance))); roots.push(root) })
   expect(root.root.findByProps({ className: 'dsh-balance-dock-dot' }).props['data-low']).toBe('true')
   expect(root.root.findByProps({ className: 'dsh-balance-dock' }).props['aria-label']).toContain('Low balance')
+})
+
+function stubLocalStorage(): Map<string, string> {
+  const store = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value) },
+    removeItem: (key: string) => { store.delete(key) },
+  })
+  return store
+}
+
+describe('display rate storage', () => {
+  it('round-trips through localStorage and ignores invalid values', () => {
+    const store = stubLocalStorage()
+    expect(readStoredRate()).toBeNull()
+    writeStoredRate(7.2)
+    expect(store.get('dsh-balance:usd-to-cny')).toBe('7.2')
+    expect(readStoredRate()).toBe(7.2)
+    writeStoredRate(null)
+    expect(readStoredRate()).toBeNull()
+    store.set('dsh-balance:usd-to-cny', '0')
+    expect(readStoredRate()).toBeNull()
+    store.set('dsh-balance:usd-to-cny', 'abc')
+    expect(readStoredRate()).toBeNull()
+  })
+})
+
+it('drills from the session table into one session and back to the overview', async () => {
+  const all = usage(10)
+  if (!all.ok || all.scope !== 'all') throw new Error('invalid fixture')
+  all.summary.bySession = [{ ...all.summary.totals, sessionId: 'session-a', title: 'Session A' }]
+  const session: UsageApiResponse = {
+    ok: true, scope: 'session', fetchedAt: new Date().toISOString(), source: 'live',
+    session: { ...all.summary.totals, sessionId: 'session-a', title: 'Session A' },
+    summary: all.summary,
+    requests: [],
+  }
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValueOnce(all).mockResolvedValueOnce(session).mockResolvedValue(all)
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  // Cross-component state updates need an async act flush (React 18 batching).
+  await act(async () => { root.root.findAllByProps({ role: 'tab' })[2]!.props.onClick() })
+  await act(async () => { root.root.findByProps({ className: 'dsh-billing-session-title dsh-billing-session-action' }).props.onClick() })
+  expect(loadUsage).toHaveBeenCalledTimes(2)
+  expect(loadUsage.mock.calls[1]?.[0]).toMatchObject({ scope: 'session', sessionId: 'session-a' })
+  expect(JSON.stringify(root.toJSON())).toContain('Session usage details')
+  await act(async () => { root.root.findByProps({ 'aria-label': 'Back to overview' }).props.onClick() })
+  expect(loadUsage).toHaveBeenCalledTimes(3)
+  expect(loadUsage.mock.calls[2]?.[0]).toMatchObject({ scope: 'all' })
+})
+
+it('offers JSON and CSV export buttons that survive a DOM-less environment', async () => {
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(usage(10))
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  const byText = (text: string) => root.root.findAllByProps({ className: 'dsh-balance-refresh' }).find(button => button.props.children === text)
+  const json = byText('Export JSON')
+  const csv = byText('Export CSV')
+  expect(json).toBeDefined()
+  expect(csv).toBeDefined()
+  expect(json!.props.disabled).toBe(false)
+  act(() => { json!.props.onClick(); csv!.props.onClick() })
+})
+
+it('applies a stored display rate and persists edits without a Host restart', async () => {
+  const store = stubLocalStorage()
+  store.set('dsh-balance:usd-to-cny', '7.2')
+  const result = usage(10)
+  if (!result.ok || result.scope !== 'all') throw new Error('invalid fixture')
+  result.summary.totals = { ...result.summary.totals, pricedRequests: 1, unpricedRequests: 0, costUsd: 1, hasCompleteCnyTotal: true }
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(result)
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  expect(JSON.stringify(root.toJSON())).toContain('¥7.20')
+  act(() => root.root.findByProps({ 'aria-label': 'USD→CNY rate' }).props.onChange({ target: { value: '7.5' } }))
+  expect(store.get('dsh-balance:usd-to-cny')).toBe('7.5')
+  await act(async () => {})
+  expect(JSON.stringify(root.toJSON())).toContain('¥7.50')
+})
+
+it('prefers Host-provided model prices over the bundled catalog', async () => {
+  const loadModels = vi.fn<ModelsTabInjected['loadModels']>().mockResolvedValue({
+    ok: true,
+    provider: 'deepseek',
+    fetchedAt: new Date().toISOString(),
+    source: 'live',
+    models: [{ id: 'deepseek-v4-flash', ownedBy: 'deepseek' }],
+    prices: [{
+      provider: 'deepseek', model: 'deepseek-v4-flash', effectiveFrom: '2026-01-01T00:00:00.000Z', pricingVersion: 'pricing-override',
+      cacheHitUsdPerMillion: 0.001, cacheMissUsdPerMillion: 0.01, outputUsdPerMillion: 0.02,
+    }],
+  })
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(ModelsSection, { provider: 'deepseek', loadModels, t })); roots.push(root) })
+  const json = JSON.stringify(root.toJSON())
+  expect(json).toContain('Input $0.01 · Output $0.02 per million tokens')
+  expect(json).not.toContain('$0.22')
 })

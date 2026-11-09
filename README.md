@@ -4,7 +4,7 @@
 
 DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 DeepSeek / StepFun / Tokener 的可用模型和多维消费统计。API Key 仅由本机 Host 使用，不会发送到浏览器。
 
-界面使用 Harness 原生侧栏、主页面和主题变量。侧栏“插件”下方新增“用量统计”，独立查看所有对话的提供方、模型、会话和日期统计；默认显示全部提供方与全部时间，支持提供方和日期范围筛选。活动打卡图按浏览器时区的星期 × 24 小时汇总请求次数，圆点大小随次数变化；悬停或使用方向键可查看请求数与 token 明细。选择器采用主题化浮层菜单，支持方向键、Home/End、Enter、Escape 和按名称检索。设置页支持 DeepSeek / StepFun / Tokener 切换。统计范围除今日 / 7 天 / 30 天 / 全部时间外，还可自定义起止日期；时区默认跟随浏览器，可切换为 UTC 等常用时区，日期分组、打卡图与月度预测均按所选时区计算。总消费卡片在限定范围时显示与上一同期的对比，并按当月已用天数线性预测本月花费。余额走势仅保留在当前 Harness 进程内（最近 48 次实时查询），重启后重新累积。运行 `pnpm preview` 可查看使用示例数据的新版界面。
+界面使用 Harness 原生侧栏、主页面和主题变量。侧栏“插件”下方新增“用量统计”，独立查看所有对话的提供方、模型、会话和日期统计；默认显示全部提供方与全部时间，支持提供方和日期范围筛选。活动打卡图按浏览器时区的星期 × 24 小时汇总请求次数，圆点大小随次数变化；悬停或使用方向键可查看请求数与 token 明细。选择器采用主题化浮层菜单，支持方向键、Home/End、Enter、Escape 和按名称检索。设置页支持 DeepSeek / StepFun / Tokener 切换。统计范围除今日 / 7 天 / 30 天 / 全部时间外，还可自定义起止日期；时区默认跟随浏览器，可切换为 UTC 等常用时区，日期分组、打卡图与月度预测均按所选时区计算。总消费卡片在限定范围时显示与上一同期的对比，并按当月已用天数线性预测本月花费。余额走势仅保留在当前 Harness 进程内（最近 48 次实时查询），重启后重新累积。「会话」分类下点击会话名可下钻查看该会话的完整请求明细（不受范围与提供方筛选影响），随时返回总览；「导出 JSON / CSV」分别导出完整摘要与当前分类表格（会话视图导出请求级记录），汇率输入框可即时换算人民币合计。运行 `pnpm preview` 可查看使用示例数据的新版界面。
 
 聊天框底部会跟随当前会话所选的提供方与模型更新余额；设置页可独立切换提供方。
 
@@ -22,6 +22,10 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 De
 - DeepSeek 费用显示 USD、StepFun 显示原生 CNY；配置 `usdToCny` 后显示人民币合计
 - 缓存查询结果并支持手动刷新
 - 模型列表标注内置参考价（输入 / 输出每百万 tokens），未收录价格的模型明确标记
+- 统计页「会话」分类中点击任一会话，下钻查看该会话的完整请求明细，可随时返回总览
+- 一键导出当前视图为 JSON 或 CSV（总览导出所选分类或完整摘要，会话导出请求级记录），数据不离开本机
+- 统计页可直接填写 USD→CNY 汇率（存于浏览器 localStorage，无需重启）；插件配置 `usdToCny` 优先生效
+- 配置 `pricingOverrides` 可用自定义费率替换内置价格（按 provider + model 匹配，支持生效时间），模型列表与计费估算同步生效
 - 设置页展示近期余额走势（进程内最近 48 次查询），并可按币种配置低额预警（`lowBalance`），聊天框下方同步提示
 - 统计页支持自定义日期范围与 12 个常用时区（默认跟随浏览器），月度按当前节奏预测，限定范围时与上一同期对比
 - 余额与模型查询对 429 / 5xx 自动重试（尊重 `Retry-After`，指数退避，最多 3 次尝试）
@@ -79,6 +83,25 @@ lowBalance:
   - currency: USD
     amount: 5
 ```
+
+还可用自定义费率替换内置价格（需完整的 USD 或 CNY 三项费率，`effectiveFrom` 可省略，默认立即生效；修改后需重启 Harness）：
+
+```yaml
+pricingOverrides:
+  - provider: deepseek
+    model: deepseek-v4-flash
+    cacheMissUsdPerMillion: 0.10
+    cacheHitUsdPerMillion: 0.01
+    outputUsdPerMillion: 0.30
+  - provider: stepfun
+    model: step-5-preview
+    effectiveFrom: "2026-11-01T00:00:00Z"
+    cacheMissCnyPerMillion: 6
+    cacheHitCnyPerMillion: 0.3
+    outputCnyPerMillion: 18
+```
+
+自定义价格同时作用于设置页模型列表标注与消费统计估算；未覆盖的模型仍按内置价格计算。汇率除配置 `usdToCny` 外，也可在统计页直接填写（仅保存在本浏览器，插件配置优先生效）。
 
 官方提供方 ID `deepseek-official` 与旧 ID `deepseek` 均受支持（大小写不敏感），共享 DeepSeek 凭据、余额及模型缓存。底部保留实际模型 ID，例如 `deepseek-flash`；价格未知的新模型仍标为“未计费”。
 

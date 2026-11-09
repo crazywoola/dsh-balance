@@ -1,6 +1,6 @@
 import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import { extractSessionUsage } from './billing.ts'
-import type { BillingRecordsSource } from './billing.ts'
+import type { BillingPrice, BillingRecordsSource } from './billing.ts'
 
 function sessionTitle(events: readonly { type: string; data: unknown }[], fallback: string): string {
   let title = fallback
@@ -25,7 +25,7 @@ export class UsageReader {
     for (const id of this.cache.keys()) if (!ids.has(id)) this.cache.delete(id)
   }
 
-  read(snapshot: SessionPersistenceSnapshot, refresh: boolean): Promise<BillingRecordsSource> {
+  read(snapshot: SessionPersistenceSnapshot, refresh: boolean, pricingOverrides: readonly BillingPrice[] = []): Promise<BillingRecordsSource> {
     const id = String(snapshot.header.id)
     const revision = JSON.stringify(snapshot.revision)
     const key = JSON.stringify([id, revision])
@@ -45,7 +45,7 @@ export class UsageReader {
         source = {
           sessionId: id,
           title: sessionTitle(events, id),
-          records: extractSessionUsage(id, handle.inheritedEventCount, events, { timeZone: 'UTC' }),
+          records: extractSessionUsage(id, handle.inheritedEventCount, events, { timeZone: 'UTC', pricingOverrides }),
         }
       } finally {
         await handle.close()

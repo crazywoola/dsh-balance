@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelInfo, ModelsApiResponse } from '../types.ts'
+import type { BillingPrice } from '../billing.ts'
 import { findBalanceProvider } from '../providers.ts'
 import { findBillingPrice } from '../billing.ts'
 import { displayRate } from './format.ts'
@@ -14,8 +15,9 @@ export interface ModelsTabInjected {
 
 export type ModelsTabProps = ModelsTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: BalanceProviderId }
 
-function ModelCard({ model, provider, t }: { model: ModelInfo; provider: BalanceProviderId; t: ModelsTabProps['t'] }) {
-  const price = findBillingPrice(provider, model.id)
+function ModelCard({ model, provider, prices, t }: { model: ModelInfo; provider: BalanceProviderId; prices: ReadonlyMap<string, BillingPrice>; t: ModelsTabProps['t'] }) {
+  // Host-provided prices include configured overrides; the bundled catalog is the fallback.
+  const price = prices.get(model.id) ?? findBillingPrice(provider, model.id)
   const currency = price?.currency ?? 'USD'
   const inputRate = price === undefined ? 0 : price.currency === 'CNY' ? price.cacheMissCnyPerMillion : price.cacheMissUsdPerMillion
   const outputRate = price === undefined ? 0 : price.currency === 'CNY' ? price.outputCnyPerMillion : price.outputUsdPerMillion
@@ -37,6 +39,7 @@ function ModelCard({ model, provider, t }: { model: ModelInfo; provider: Balance
 export function ModelsSection({ loadModels, t, provider = 'deepseek' }: ModelsTabProps) {
   const [result, setResult] = useState<ModelsApiResponse>()
   const [loading, setLoading] = useState(true)
+  const prices = useMemo(() => new Map((result?.ok === true ? result.prices ?? [] : []).map(price => [price.model, price])), [result])
 
   const active = useRef<AbortController>()
   const providerName = findBalanceProvider(provider)!.name
@@ -88,7 +91,7 @@ export function ModelsSection({ loadModels, t, provider = 'deepseek' }: ModelsTa
             <span>{t('models.count', { count: result.models.length })}</span>
           </div>
           {result.models.length > 0
-            ? <div className="dsh-model-grid">{result.models.map(model => <ModelCard key={model.id} model={model} provider={provider} t={t} />)}</div>
+            ? <div className="dsh-model-grid">{result.models.map(model => <ModelCard key={model.id} model={model} provider={provider} prices={prices} t={t} />)}</div>
             : <p className="dsh-balance-status">{t('models.empty')}</p>}
           <p className="dsh-balance-meta">
             {t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}

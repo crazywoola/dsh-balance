@@ -1,3 +1,5 @@
+import type { BillingPrice } from './billing.ts'
+
 /** The same-origin endpoint exposed by the plugin's Host half. */
 export const BALANCE_ROUTE = '/dsh-balance/api/balance'
 
@@ -88,6 +90,8 @@ export interface ModelsSuccess {
   ok: true
   provider?: string
   models: ModelInfo[]
+  /** Effective per-model prices (configured overrides applied), for display only. */
+  prices?: BillingPrice[]
   fetchedAt: string
   source: 'live' | 'cache'
 }

@@ -113,6 +113,17 @@ describe('provider balance route', () => {
     expect(body.lowBalance).toBeUndefined()
   })
 
+  it('returns effective per-model prices with configured overrides applied', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ object: 'list', data: [{ id: 'deepseek-v4-flash', object: 'model', owned_by: 'deepseek' }] }))
+    const builtIn = (await setup({}, '/dsh-balance/api/models').request()).body
+    expect(builtIn.prices).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.22 }))
+
+    const overridden = (await setup({ pricingOverrides: [{ provider: 'DeepSeek', model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.01, cacheHitUsdPerMillion: 0, outputUsdPerMillion: 0.02 }] }, '/dsh-balance/api/models').request()).body
+    const flash = overridden.prices.find((price: { model: string }) => price.model === 'deepseek-v4-flash')
+    expect(flash).toMatchObject({ provider: 'deepseek', cacheMissUsdPerMillion: 0.01, pricingVersion: 'pricing-override' })
+    expect(overridden.prices.filter((price: { model: string }) => price.model === 'deepseek-v4-flash')).toHaveLength(1)
+  })
+
   it('validates overrides before registering routes', () => {
     expect(() => setup({ providers: [{ id: 'stepfun', baseUrl: 'http://example.com/v1' }] })).toThrow('HTTPS')
     expect(() => setup({ providers: [{ id: 'StepFun' }, { id: 'STEPFUN' }] })).toThrow('duplicate')

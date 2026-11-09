@@ -221,6 +221,14 @@ export const balanceStyles = `
 }
 .dsh-model-owner { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-model-price { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-billing-session-action { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.dsh-billing-session-action:hover { color: var(--dsw-alias-state-business-primary, #4d6bfe); }
+.dsh-billing-session-action:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; border-radius: 4px; }
+.dsh-billing-rate { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ledger-muted); white-space: nowrap; }
+.dsh-billing-rate input { width: 76px; min-height: 32px; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md, 8px); padding: 0 8px; background: transparent; color: var(--ledger-ink); font: inherit; font-size: 13px; }
+.dsh-billing-rate input:disabled { opacity: .55; }
+.dsh-billing-rate input[data-invalid='true'] { border-color: var(--dsw-alias-state-error-primary, #c33); }
+.dsh-billing-rate input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
 .dsh-model-price[data-known='false'] { font-style: italic; opacity: .75; }
 .dsh-balance-dock {
   box-sizing: border-box;

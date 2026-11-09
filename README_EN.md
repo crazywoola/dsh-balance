@@ -22,6 +22,10 @@ The composer readout follows the current session’s provider and model. The Set
 - Show native USD and CNY costs separately; `usdToCny` enables a combined CNY total
 - Cache query results with manual refresh support
 - Annotate the model list with catalogued reference rates (input/output per million tokens); models without published pricing are marked explicitly
+- Drill from the Sessions category into any session's full request breakdown and back to the overview
+- Export the current view as JSON or CSV (overview: full summary or the visible category; session: request-level records) — data never leaves the machine
+- Enter a display-only USD→CNY rate on the usage page (kept in browser localStorage, no restart); the plugin's `usdToCny` config still takes precedence
+- Replace built-in prices with `pricingOverrides` (matched by provider + model, optional `effectiveFrom`); the model list and usage estimates follow
 - Show a recent balance trend (the last 48 in-process observations) in Settings and optional per-currency low-balance warnings (`lowBalance`), mirrored below the composer
 - Custom date ranges and twelve common time zones (browser default); month-to-date projection at the current pace, plus a comparison with the immediately preceding period for bounded ranges
 - Retry balance and model queries on 429 / 5xx (honoring `Retry-After`, exponential backoff, at most three attempts)
@@ -65,6 +69,35 @@ Usage statistics read persisted session logs, including writes visible from acti
 ```yaml
 usdToCny: 7.2
 ```
+
+Per-currency low-balance thresholds (case-insensitive currency) surface warnings in Settings and below the composer:
+
+```yaml
+lowBalance:
+  - currency: CNY
+    amount: 20
+  - currency: USD
+    amount: 5
+```
+
+Replace built-in prices with custom rates (a complete USD or CNY triple is required; `effectiveFrom` is optional and defaults to immediate; restart Harness after changing them):
+
+```yaml
+pricingOverrides:
+  - provider: deepseek
+    model: deepseek-v4-flash
+    cacheMissUsdPerMillion: 0.10
+    cacheHitUsdPerMillion: 0.01
+    outputUsdPerMillion: 0.30
+  - provider: stepfun
+    model: step-5-preview
+    effectiveFrom: "2026-11-01T00:00:00Z"
+    cacheMissCnyPerMillion: 6
+    cacheHitCnyPerMillion: 0.3
+    outputCnyPerMillion: 18
+```
+
+Overrides apply to both the model-list annotations and usage estimates; models without an override keep their built-in rates. Besides `usdToCny`, the usage page also accepts a display-only rate stored in this browser; the plugin configuration wins when present.
 
 Both the official provider ID `deepseek-official` and legacy `deepseek` are supported case-insensitively and share DeepSeek credentials, balance caches, and model caches. The composer retains the actual model ID, such as `deepseek-flash`; new models with unknown pricing remain unpriced.
 

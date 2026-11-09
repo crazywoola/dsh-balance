@@ -14,6 +14,8 @@ import { Punchcard } from './Punchcard.tsx'
 import { Dropdown } from './Dropdown.tsx'
 import { DetailPanel, PagedRows } from './BillingDetails.tsx'
 import { displayAmount, displayTokens } from './format.ts'
+import type { UsageCategory } from './export.ts'
+import { downloadTextFile, overviewCsv, overviewJson, sessionCsv, sessionJson } from './export.ts'
 import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
 
 export interface UsageLoadOptions {
@@ -34,6 +36,7 @@ export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_
 export type BillingViewProps = PropsRuntime<'conversation.view'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
 export type UsageRange = 'today' | '7d' | '30d' | 'all' | 'custom'
+export type UsageCategoryState = 'model' | 'provider' | 'session' | 'day'
 
 /** Zones offered by the time-zone selector; the browser default always leads. */
 const COMMON_TIME_ZONES = [
@@ -50,6 +53,34 @@ const COMMON_TIME_ZONES = [
   'America/Los_Angeles',
   'Australia/Sydney',
 ] as const
+
+/** localStorage key for the display-only USD→CNY rate. */
+const RATE_STORAGE_KEY = 'dsh-balance:usd-to-cny'
+
+/** Read the stored display rate; storage failures degrade to no rate. */
+export function readStoredRate(): number | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(RATE_STORAGE_KEY)
+    const value = raw === null || raw === undefined ? Number.NaN : Number(raw)
+    return Number.isFinite(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+/** Persist or clear the display rate; storage failures stay session-only. */
+export function writeStoredRate(value: number | null): void {
+  try {
+    if (value === null) globalThis.localStorage?.removeItem(RATE_STORAGE_KEY)
+    else globalThis.localStorage?.setItem(RATE_STORAGE_KEY, String(value))
+  } catch {
+    // Private-mode or disabled storage: the rate applies to this view only.
+  }
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 1e6) / 1e6
+}
 
 function formatTokens(value: number, locale = 'en-US'): string {
   return displayTokens(value, locale)
@@ -165,32 +196,40 @@ function ErrorMessage({ result, t }: { result: UsageApiResponse; t: BillingOverv
   return <p className="dsh-balance-error" role="alert">{t(key)}{detail}</p>
 }
 
-function CostLabel({ totals, t, cnyTotalMode = 'unavailable' }: { totals: UsageTotals; t: BillingOverviewProps['t']; cnyTotalMode?: UsageSummary['cnyTotalMode'] }) {
+function CostLabel({ totals, t, usdToCny = null }: { totals: UsageTotals; t: BillingOverviewProps['t']; usdToCny?: number | null }) {
   const locale = t('locale.tag')
   const metric = primaryMetric(totals)
   const unpriced = metric.unpriced
   const cnyOnly = !unpriced && metric.currency === 'CNY'
   const mixed = totals.cnyPricedRequests > 0 && !cnyOnly
+  // The display rate converts on the client, so it works without a Host restart.
+  const combined = usdToCny === null ? null : roundMoney(totals.nativeCostCny + totals.costUsd * usdToCny)
   return (
     <div className="dsh-billing-cost-value">
       <strong>{unpriced ? t('billing.notPriced') : cnyOnly ? amount(totals.nativeCostCny, 'CNY', locale) : amount(totals.costUsd, 'USD', locale)}</strong>
       {mixed ? <span>{amount(totals.nativeCostCny, 'CNY', locale)} {t('billing.nativeCny')}</span> : null}
       {totals.unpricedRequests > 0 && !unpriced ? <small>{t('billing.partial')}</small> : null}
-      {totals.costCny !== null && totals.hasCompleteCnyTotal && !unpriced && !cnyOnly && cnyTotalMode === 'converted' ? <span>{amount(totals.costCny, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
+      {combined !== null && !unpriced && !cnyOnly ? <span>{amount(combined, 'CNY', locale)} {t('billing.fixedRate')}</span> : null}
     </div>
   )
 }
 
-function SummaryCards({ summary, t, comparison }: { summary: UsageSummary; t: BillingOverviewProps['t']; comparison?: ReactNode }) {
+function SummaryCards({ summary, t, comparison, showProjection = true, usdToCny = null }: {
+  summary: UsageSummary
+  t: BillingOverviewProps['t']
+  comparison?: ReactNode
+  showProjection?: boolean
+  usdToCny?: number | null
+}) {
   const today = totalForDay(summary, localDateKey(summary.timeZone))
-  const projection = monthProjection(summary)
+  const projection = showProjection ? monthProjection(summary) : undefined
   const metric = primaryMetric(summary.totals)
   const locale = t('locale.tag')
   return (
     <div className="dsh-billing-card-grid">
       <article className="dsh-billing-card dsh-billing-card-primary">
         <span>{t('billing.totalCost')}</span>
-        <CostLabel totals={summary.totals} t={t} cnyTotalMode={summary.cnyTotalMode} />
+        <CostLabel totals={summary.totals} t={t} usdToCny={usdToCny} />
         {projection !== undefined && !metric.unpriced && metric.value !== null
           ? <small title={t('billing.monthProjectionHint', projection)}>{t('billing.monthProjection', { amount: displayAmount(String(Math.round(projection.amount * 1e4) / 1e4), metric.currency, locale) })}</small>
           : null}
@@ -199,7 +238,7 @@ function SummaryCards({ summary, t, comparison }: { summary: UsageSummary; t: Bi
       </article>
       <article className="dsh-billing-card">
         <span>{t('billing.todayCost')}</span>
-        <CostLabel totals={today} t={t} cnyTotalMode={summary.cnyTotalMode} />
+        <CostLabel totals={today} t={t} usdToCny={usdToCny} />
         <small>{t('billing.today', { date: localDateKey(summary.timeZone) })}</small>
       </article>
       <article className="dsh-billing-card">
@@ -214,6 +253,31 @@ function SummaryCards({ summary, t, comparison }: { summary: UsageSummary; t: Bi
         <small>{t('billing.unpricedHint')}</small>
       </article>
     </div>
+  )
+}
+
+/** Display-only exchange rate; the Host configuration wins when present. */
+function RateEditor({ value, configured, onChange, t }: {
+  value: number | null
+  configured: boolean
+  onChange: (value: number | null) => void
+  t: BillingOverviewProps['t']
+}) {
+  const [text, setText] = useState(value === null ? '' : String(value))
+  useEffect(() => { setText(value === null ? '' : String(value)) }, [value])
+  const invalid = text.trim() !== '' && !(Number(text) > 0)
+  return (
+    <label className="dsh-billing-rate" title={configured ? t('rate.configured') : invalid ? t('rate.invalid') : t('rate.hint')}>
+      <span>{t('rate.usdToCny')}</span>
+      <input type="number" inputMode="decimal" min="0" step="any" value={text} disabled={configured}
+        aria-label={t('rate.usdToCny')} data-invalid={invalid ? 'true' : undefined}
+        onChange={event => {
+          const next = event.target.value
+          setText(next)
+          const parsed = Number(next)
+          onChange(next.trim() === '' || !(parsed > 0) ? null : parsed)
+        }} />
+    </label>
   )
 }
 
@@ -256,7 +320,7 @@ export function PeriodComparison({ load, previousOptions, current, t }: {
   })}</small>
 }
 
-function ModelRows({ summary, items = summary.byModel, t }: { summary: UsageSummary; items?: readonly UsageSummary['byModel'][number][]; t: BillingOverviewProps['t'] }) {
+function ModelRows({ summary, items = summary.byModel, t, usdToCny = null }: { summary: UsageSummary; items?: readonly UsageSummary['byModel'][number][]; t: BillingOverviewProps['t']; usdToCny?: number | null }) {
   return <div className="dsh-billing-list">
     {items.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : items.map(item => (
       <article className="dsh-billing-list-row" key={JSON.stringify([item.provider, item.model])}>
@@ -268,7 +332,7 @@ function ModelRows({ summary, items = summary.byModel, t }: { summary: UsageSumm
           <TotalsCaption totals={item} t={t} />
         </div>
         <div className="dsh-billing-list-value">
-          <CostLabel totals={item} t={t} />
+          <CostLabel totals={item} t={t} usdToCny={usdToCny} />
           <small>{t('billing.requestCount', { count: item.requests })}{item.pricedRequests > item.cnyPricedRequests && summary.totals.costUsd > 0 ? ` · ${t('billing.share', { percent: `${Math.round(item.costUsd / summary.totals.costUsd * 100)}%` })}` : ''}</small>
         </div>
       </article>
@@ -276,35 +340,52 @@ function ModelRows({ summary, items = summary.byModel, t }: { summary: UsageSumm
   </div>
 }
 
-function AggregateRows({ items, t }: { items: readonly { key: string; title: string; totals: UsageTotals }[]; t: BillingOverviewProps['t'] }) {
+function AggregateRows({ items, t, usdToCny = null, onSelect }: {
+  items: readonly { key: string; title: string; totals: UsageTotals }[]
+  t: BillingOverviewProps['t']
+  usdToCny?: number | null
+  onSelect?: ((key: string) => void) | undefined
+}) {
   return <div className="dsh-billing-list">
     {items.length === 0 ? <p className="dsh-balance-status">{t('billing.empty')}</p> : items.map(item => (
       <article className="dsh-billing-list-row" key={item.key}>
-        <div className="dsh-billing-row-main"><span className="dsh-billing-session-title" title={item.title}>{item.title}</span><TotalsCaption totals={item.totals} t={t} /></div>
-        <div className="dsh-billing-list-value"><CostLabel totals={item.totals} t={t} /><small>{t('billing.requestCount', { count: item.totals.requests })}</small></div>
+        <div className="dsh-billing-row-main">
+          {onSelect === undefined
+            ? <span className="dsh-billing-session-title" title={item.title}>{item.title}</span>
+            : <button type="button" className="dsh-billing-session-title dsh-billing-session-action" title={item.title}
+              aria-label={t('billing.sessionDrill')} onClick={() => onSelect(item.key)}>{item.title}</button>}
+          <TotalsCaption totals={item.totals} t={t} />
+        </div>
+        <div className="dsh-billing-list-value"><CostLabel totals={item.totals} t={t} usdToCny={usdToCny} /><small>{t('billing.requestCount', { count: item.totals.requests })}</small></div>
       </article>
     ))}
   </div>
 }
 
-function UsageTables({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
-  const [category, setCategory] = useState<'model' | 'provider' | 'session' | 'day'>('model')
+function UsageTables({ summary, t, usdToCny = null, category, onCategoryChange, onSessionSelect }: {
+  summary: UsageSummary
+  t: BillingOverviewProps['t']
+  usdToCny?: number | null
+  category: UsageCategoryState
+  onCategoryChange: (value: UsageCategoryState) => void
+  onSessionSelect?: (sessionId: string) => void
+}) {
   const rows: { key: string; title: string; totals: UsageTotals }[] = category === 'provider' ? summary.byProvider.map(item => ({ key: item.provider, title: findBalanceProvider(item.provider)?.name ?? item.provider, totals: item }))
     : category === 'session' ? summary.bySession.map(item => ({ key: item.sessionId, title: item.title, totals: item }))
       : summary.byDay.map(item => ({ key: item.date, title: item.date, totals: item }))
-  return <DetailPanel label={t('billing.categories')} value={category} onChange={setCategory} tabs={[
+  return <DetailPanel label={t('billing.categories')} value={category} onChange={onCategoryChange} tabs={[
     { value: 'model', label: t('billing.modelsLabel'), count: summary.byModel.length },
     { value: 'provider', label: t('billing.providersLabel'), count: summary.byProvider.length },
     { value: 'session', label: t('billing.sessionsLabel'), count: summary.bySession.length },
     { value: 'day', label: t('billing.daysLabel'), count: summary.byDay.length },
   ]}>
     {category === 'model'
-      ? <PagedRows key="model" items={summary.byModel} t={t} render={items => <ModelRows items={items} summary={summary} t={t} />} />
-      : <PagedRows key={category} items={rows} t={t} render={items => <AggregateRows items={items} t={t} />} />}
+      ? <PagedRows key="model" items={summary.byModel} t={t} render={items => <ModelRows items={items} summary={summary} t={t} usdToCny={usdToCny} />} />
+      : <PagedRows key={category} items={rows} t={t} render={items => <AggregateRows items={items} t={t} usdToCny={usdToCny} onSelect={category === 'session' ? onSessionSelect : undefined} />} />}
   </DetailPanel>
 }
 
-function SessionDetails({ result, t }: { result: UsageSessionSuccess; t: BillingOverviewProps['t'] }) {
+function SessionDetails({ result, t, usdToCny = null }: { result: UsageSessionSuccess; t: BillingOverviewProps['t']; usdToCny?: number | null }) {
   const [category, setCategory] = useState<'model' | 'request'>('model')
   const [model, setModel] = useState('')
   const modelKey = (request: UsageRequestRecord) => JSON.stringify([request.provider ?? '', request.model ?? ''])
@@ -318,7 +399,7 @@ function SessionDetails({ result, t }: { result: UsageSessionSuccess; t: Billing
   ]} toolbar={category === 'request' ? <Dropdown label={t('billing.filterModel')} value={selectedModel} onChange={setModel}
     options={[{ value: '', label: t('billing.allModels') }, ...models.map(([value, label]) => ({ value, label }))]} /> : undefined}>
     {category === 'model'
-      ? <PagedRows key="model" items={result.summary.byModel} t={t} render={items => <ModelRows items={items} summary={result.summary} t={t} />} />
+      ? <PagedRows key="model" items={result.summary.byModel} t={t} render={items => <ModelRows items={items} summary={result.summary} t={t} usdToCny={usdToCny} />} />
       : <PagedRows key={`request:${selectedModel}`} items={requests} t={t} render={items => <RequestRows requests={items} t={t} />} />}
   </DetailPanel>
 }
@@ -404,56 +485,97 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
   const customInvalid = range === 'custom' && dates === undefined
   const [filterProvider, setFilterProvider] = useState('')
   const queryProvider = provider === undefined ? filterProvider || undefined : selectedProvider
-  const options = useMemo<UsageLoadOptions>(() => ({
-    scope: 'all',
-    timeZone,
-    ...(queryProvider === undefined ? {} : { provider: queryProvider }),
-    ...(dates ?? {}),
-  }), [queryProvider, timeZone, dates])
+  const [drill, setDrill] = useState<string | undefined>()
+  const [category, setCategory] = useState<UsageCategoryState>('model')
+  const [localRate, setLocalRate] = useState(readStoredRate)
+
+  const options = useMemo<UsageLoadOptions>(() => drill === undefined
+    ? {
+        scope: 'all',
+        timeZone,
+        ...(queryProvider === undefined ? {} : { provider: queryProvider }),
+        ...(dates ?? {}),
+      }
+    // A drilled session shows its complete history; range and provider filters do not apply.
+    : { scope: 'session', sessionId: drill, timeZone }, [drill, queryProvider, timeZone, dates])
   const load = useCallback<UsageTabInjected['loadUsage']>(async (query, signal) => (
-    customInvalid ? { ok: false, code: 'INVALID_REQUEST', message: '' } : loadUsage(query, signal)
-  ), [loadUsage, customInvalid])
+    customInvalid && drill === undefined ? { ok: false, code: 'INVALID_REQUEST', message: '' } : loadUsage(query, signal)
+  ), [loadUsage, customInvalid, drill])
   const { result, loading, refresh } = useUsageResult(load, options, JSON.stringify(options))
   // Bounded ranges compare against the immediately preceding period of equal length.
   const previousOptions = useMemo<UsageLoadOptions | undefined>(() => {
-    if (!hasRange(dates)) return undefined
+    if (drill !== undefined || !hasRange(dates)) return undefined
     const length = Math.round((Date.parse(`${dates.to}T12:00:00Z`) - Date.parse(`${dates.from}T12:00:00Z`)) / 86_400_000) + 1
     return { ...options, from: shiftDate(dates.from, -length), to: shiftDate(dates.to, -length) }
-  }, [dates, options])
+  }, [drill, dates, options])
 
   const knownProviders = useRef<string[]>([])
   if (result?.ok === true && queryProvider === undefined) knownProviders.current = result.summary.byProvider.map(item => item.provider)
+
+  const hostRate = result?.ok === true ? result.summary.usdToCny : null
+  const effectiveRate = hostRate ?? localRate
+  const allResult = result?.ok === true && result.scope === 'all' ? result : undefined
+  const sessionResult = result?.ok === true && result.scope === 'session' ? result : undefined
+
+  const exportCurrent = (format: 'json' | 'csv') => {
+    if (result?.ok !== true) return
+    const stamp = new Date().toISOString().slice(0, 10)
+    const mime = format === 'json' ? 'application/json' : 'text/csv'
+    if (result.scope === 'session') {
+      const text = format === 'json'
+        ? sessionJson(result.session, result.summary, result.requests, { scope: 'session', timeZone })
+        : sessionCsv(result.requests)
+      downloadTextFile(`dsh-balance-session-${result.session.sessionId.slice(0, 8)}-${stamp}.${format}`, mime, text)
+      return
+    }
+    const context = { scope: 'all' as const, timeZone, ...(queryProvider === undefined ? {} : { provider: queryProvider }), ...(dates ?? {}) }
+    const text = format === 'json'
+      ? overviewJson(result.summary, context)
+      : overviewCsv(result.summary, category as UsageCategory)
+    downloadTextFile(`dsh-balance-usage-${stamp}.${format}`, mime, text)
+  }
 
   return (
     <section className="dsh-billing-section" aria-labelledby="dsh-billing-title">
       <div className="dsh-balance-summary">
         <div>
-          <h2 id="dsh-billing-title" className="dsh-balance-heading">{t('billing.title')}</h2>
-          <p className="dsh-balance-copy">{t('billing.copy', { timeZone })}</p>
+          <h2 id="dsh-billing-title" className="dsh-balance-heading">{drill === undefined ? t('billing.title') : t('billing.sessionDrillTitle')}</h2>
+          <p className="dsh-balance-copy">{drill === undefined ? t('billing.copy', { timeZone }) : t('billing.sessionDrillCopy')}</p>
         </div>
         <div className="dsh-billing-actions">
-          {provider === undefined ? <Dropdown label={t('billing.provider')} value={filterProvider} onChange={setFilterProvider}
-            options={[{ value: '', label: t('panel.allProviders') }, ...knownProviders.current.map(id => ({ value: id, label: findBalanceProvider(id)?.name ?? id }))]} />
-            : <Dropdown label={t('billing.provider')} value={providerScope} onChange={setProviderScope} options={[
-              { value: 'selected', label: findBalanceProvider(provider)?.name ?? provider },
-              { value: 'all', label: t('panel.allProviders') },
-            ]} />}
-          <Dropdown label={t('billing.range')} value={range} onChange={setRange} options={[
-            { value: 'today', label: t('billing.todayRange') }, { value: '7d', label: t('billing.sevenDays') },
-            { value: '30d', label: t('billing.thirtyDays') }, { value: 'all', label: t('billing.allTime') },
-            { value: 'custom', label: t('billing.customRange') },
-          ]} />
-          {range === 'custom' ? <span className="dsh-billing-dates">
-            <input type="date" aria-label={t('billing.fromDate')} value={custom.from} max={custom.to || undefined}
-              onChange={event => { setCustom(prev => ({ ...prev, from: event.target.value })) }} />
-            <input type="date" aria-label={t('billing.toDate')} value={custom.to} min={custom.from || undefined}
-              onChange={event => { setCustom(prev => ({ ...prev, to: event.target.value })) }} />
-          </span> : null}
-          <Dropdown label={t('billing.timeZone')} value={timeZoneChoice} onChange={setTimeZoneChoice} options={[
-            { value: 'browser', label: `${t('billing.timeZoneBrowser')} · ${browserTimeZone}` },
-            ...COMMON_TIME_ZONES.map(zone => ({ value: zone, label: zone })),
-          ]} />
-          <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={refresh}>
+          {drill === undefined ? <>
+            {provider === undefined ? <Dropdown label={t('billing.provider')} value={filterProvider} onChange={setFilterProvider}
+              options={[{ value: '', label: t('panel.allProviders') }, ...knownProviders.current.map(id => ({ value: id, label: findBalanceProvider(id)?.name ?? id }))]} />
+              : <Dropdown label={t('billing.provider')} value={providerScope} onChange={setProviderScope} options={[
+                { value: 'selected', label: findBalanceProvider(provider)?.name ?? provider },
+                { value: 'all', label: t('panel.allProviders') },
+              ]} />}
+            <Dropdown label={t('billing.range')} value={range} onChange={setRange} options={[
+              { value: 'today', label: t('billing.todayRange') }, { value: '7d', label: t('billing.sevenDays') },
+              { value: '30d', label: t('billing.thirtyDays') }, { value: 'all', label: t('billing.allTime') },
+              { value: 'custom', label: t('billing.customRange') },
+            ]} />
+            {range === 'custom' ? <span className="dsh-billing-dates">
+              <input type="date" aria-label={t('billing.fromDate')} value={custom.from} max={custom.to || undefined}
+                onChange={event => { setCustom(prev => ({ ...prev, from: event.target.value })) }} />
+              <input type="date" aria-label={t('billing.toDate')} value={custom.to} min={custom.from || undefined}
+                onChange={event => { setCustom(prev => ({ ...prev, to: event.target.value })) }} />
+            </span> : null}
+            <Dropdown label={t('billing.timeZone')} value={timeZoneChoice} onChange={setTimeZoneChoice} options={[
+              { value: 'browser', label: `${t('billing.timeZoneBrowser')} · ${browserTimeZone}` },
+              ...COMMON_TIME_ZONES.map(zone => ({ value: zone, label: zone })),
+            ]} />
+          </> : <button className="dsh-balance-refresh" type="button" aria-label={t('billing.backToOverview')} onClick={() => { setDrill(undefined) }}>
+            <span aria-hidden="true">←</span> {t('billing.backToOverview')}
+          </button>}
+          <button className="dsh-balance-refresh" type="button" disabled={loading || result?.ok !== true} onClick={() => { exportCurrent('json') }}>
+            {t('billing.exportJson')}
+          </button>
+          <button className="dsh-balance-refresh" type="button" disabled={loading || result?.ok !== true} onClick={() => { exportCurrent('csv') }}>
+            {t('billing.exportCsv')}
+          </button>
+          <RateEditor value={effectiveRate} configured={hostRate !== null} onChange={value => { setLocalRate(value); writeStoredRate(value) }} t={t} />
+          <button className="dsh-balance-refresh" type="button" aria-label={t('billing.refresh')} disabled={loading} onClick={refresh}>
             {loading ? t('action.loading') : t('billing.refresh')}
           </button>
         </div>
@@ -462,16 +584,23 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
       {customInvalid ? null : <>
         {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('billing.loading')}</p> : null}
         {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
-        {result?.ok === true && result.scope === 'all' && (result.coverage?.skippedSessions ?? 0) > 0
-          ? <p className="dsh-balance-status dsh-billing-coverage" role="status">{t('billing.skippedSessions', { count: result.coverage!.skippedSessions })}</p>
+        {allResult !== undefined && (allResult.coverage?.skippedSessions ?? 0) > 0
+          ? <p className="dsh-balance-status dsh-billing-coverage" role="status">{t('billing.skippedSessions', { count: allResult.coverage!.skippedSessions })}</p>
           : null}
-        {result?.ok === true && result.scope === 'all' ? <>
-          <SummaryCards summary={result.summary} t={t} comparison={previousOptions === undefined ? undefined
-            : <PeriodComparison load={load} previousOptions={previousOptions} current={result} t={t} />} />
-          <Punchcard summary={result.summary} t={t} />
-          <UsageTables summary={result.summary} t={t} />
+        {allResult !== undefined ? <>
+          <SummaryCards summary={allResult.summary} t={t} usdToCny={effectiveRate}
+            comparison={previousOptions === undefined ? undefined
+              : <PeriodComparison load={load} previousOptions={previousOptions} current={allResult} t={t} />} />
+          <Punchcard summary={allResult.summary} t={t} />
+          <UsageTables summary={allResult.summary} t={t} usdToCny={effectiveRate} category={category} onCategoryChange={setCategory} onSessionSelect={setDrill} />
           <p className="dsh-balance-meta">{t('billing.estimate')}</p>
-          <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}</p>
+          <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(allResult.fetchedAt).toLocaleString(t('locale.tag')) })}{allResult.source === 'cache' ? t('meta.cached') : ''}</p>
+        </> : null}
+        {sessionResult !== undefined ? <>
+          <SummaryCards summary={sessionResult.summary} t={t} usdToCny={effectiveRate} showProjection={false} />
+          <p className="dsh-balance-meta">{t('billing.estimate')}</p>
+          <SessionDetails key={sessionResult.session.sessionId} result={sessionResult} t={t} usdToCny={effectiveRate} />
+          <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(sessionResult.fetchedAt).toLocaleString(t('locale.tag')) })}{sessionResult.source === 'cache' ? t('meta.cached') : ''}</p>
         </> : null}
       </>}
     </section>
@@ -480,11 +609,14 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
 
 export function BillingView({ loadUsage, sessionId, useSession, useProjection, t }: BillingViewProps) {
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
+  const [localRate] = useState(readStoredRate)
   const running = useSession(snapshot => snapshot.running)
   const tokenUsage = useProjection('tokenUsage')
   const options = useMemo<UsageLoadOptions>(() => ({ scope: 'session', sessionId, timeZone }), [sessionId, timeZone])
   const { result, loading, refresh } = useUsageResult(loadUsage, options, `${sessionId}:${running}:${JSON.stringify(tokenUsage)}`)
   const sessionResult = result?.ok === true && result.scope === 'session' ? result as UsageSessionSuccess : undefined
+  const hostRate = result?.ok === true ? result.summary.usdToCny : null
+  const effectiveRate = hostRate ?? localRate
 
   return (
     <section className="dsh-billing-view" aria-labelledby="dsh-billing-view-title">
@@ -493,16 +625,16 @@ export function BillingView({ loadUsage, sessionId, useSession, useProjection, t
           <h2 id="dsh-billing-view-title" className="dsh-balance-heading">{t('billing.sessionTitle')}</h2>
           <p className="dsh-balance-copy">{t('billing.sessionCopy')}</p>
         </div>
-        <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={refresh}>
+        <button className="dsh-balance-refresh" type="button" aria-label={t('billing.refresh')} disabled={loading} onClick={refresh}>
           {loading ? t('action.loading') : t('billing.refresh')}
         </button>
       </div>
       {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('billing.loading')}</p> : null}
       {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
       {sessionResult !== undefined ? <>
-        <SummaryCards summary={sessionResult.summary} t={t} />
+        <SummaryCards summary={sessionResult.summary} t={t} usdToCny={effectiveRate} showProjection={false} />
         <p className="dsh-balance-meta">{t('billing.estimate')}</p>
-        <SessionDetails key={sessionId} result={sessionResult} t={t} />
+        <SessionDetails key={sessionId} result={sessionResult} t={t} usdToCny={effectiveRate} />
         <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(sessionResult.fetchedAt).toLocaleString(t('locale.tag')) })}{sessionResult.source === 'cache' ? t('meta.cached') : ''}</p>
       </> : null}
     </section>

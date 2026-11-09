@@ -4,8 +4,17 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import z from '@deepseek-ai/schemastery'
+import type { BillingPrice } from './billing.ts'
 import { BalanceQueryError, queryProviderBalance } from './balance.ts'
-import { aggregateBillingRecords, assertTimeZone, normalizeUsdToCny, USAGE_ROUTE } from './billing.ts'
+import type { PricingOverrideInput } from './billing.ts'
+import {
+  aggregateBillingRecords,
+  assertTimeZone,
+  effectivePrices,
+  normalizePricingOverrides,
+  normalizeUsdToCny,
+  USAGE_ROUTE,
+} from './billing.ts'
 import { UsageReader } from './usage-reader.ts'
 import { ModelQueryError, queryProviderModels } from './models.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
@@ -45,6 +54,8 @@ export interface Config {
   usdToCny?: number
   /** Per-currency low-balance thresholds surfaced in responses; absent disables warnings. */
   lowBalance?: { currency: string; amount: number }[]
+  /** User price rows that replace built-in rates for the same provider/model. */
+  pricingOverrides?: PricingOverrideInput[]
 }
 
 export const Config: z<Config> = z.object({
@@ -62,6 +73,17 @@ export const Config: z<Config> = z.object({
   lowBalance: z.array(z.object({
     currency: z.string().required(),
     amount: z.number().min(0).required(),
+  })).required(false),
+  pricingOverrides: z.array(z.object({
+    provider: z.string().required(),
+    model: z.string().required(),
+    effectiveFrom: z.string().required(false),
+    cacheHitUsdPerMillion: z.number().min(0).required(false),
+    cacheMissUsdPerMillion: z.number().min(0).required(false),
+    outputUsdPerMillion: z.number().min(0).required(false),
+    cacheHitCnyPerMillion: z.number().min(0).required(false),
+    cacheMissCnyPerMillion: z.number().min(0).required(false),
+    outputCnyPerMillion: z.number().min(0).required(false),
   })).required(false),
 })
 
@@ -188,6 +210,9 @@ function decorateBalance(config: Config, value: BalanceSuccess, history: readonl
 
 /** Register the Host route that keeps credentials and upstream access out of the browser. */
 export function apply(ctx: Context, config: Config): void {
+  // Configured prices are validated once; Host config is static for the process,
+  // so cached usage records never mix two price sets.
+  const pricingOverrides = normalizePricingOverrides(config.pricingOverrides)
   validateBaseUrl(config.baseUrl)
   credentialRef(config.apiKeyRef)
   const providerConfigs = new Map<string, { apiKeyRef: string; baseUrl: string }>(
@@ -325,6 +350,7 @@ export function apply(ctx: Context, config: Config): void {
         ok: true,
         provider: provider.id,
         models: result.models,
+        prices: effectivePrices(provider.id, pricingOverrides),
         fetchedAt: new Date().toISOString(),
         source: 'live',
       }
@@ -382,7 +408,7 @@ export function apply(ctx: Context, config: Config): void {
 
       const sessionReads = await mapWithConcurrency(snapshots, 4, async (snapshot) => {
         try {
-          return await usageReader.read(snapshot, query.refresh)
+          return await usageReader.read(snapshot, query.refresh, pricingOverrides)
         } catch {
           if (query.scope === 'session') throw new Error('Selected session usage could not be read')
           // One unsupported historical log must not hide the other sessions.
@@ -403,11 +429,13 @@ export function apply(ctx: Context, config: Config): void {
         to?: string
         usdToCny?: number
         provider?: string
+        pricingOverrides?: readonly BillingPrice[]
       } = { timeZone: query.timeZone }
       if (query.provider !== undefined) aggregateOptions.provider = query.provider
       if (query.from !== undefined) aggregateOptions.from = query.from
       if (query.to !== undefined) aggregateOptions.to = query.to
       if (usdToCny !== undefined) aggregateOptions.usdToCny = usdToCny
+      if (pricingOverrides.length > 0) aggregateOptions.pricingOverrides = pricingOverrides
       const aggregate = aggregateBillingRecords(sources, aggregateOptions)
       const fetchedAt = new Date().toISOString()
       const value: UsageAllSuccess | UsageSessionSuccess = query.scope === 'session'
@@ -468,8 +496,10 @@ export {
   BILLING_PRICES,
   BILLING_PRICING_VERSION,
   calculateRequestCost,
+  effectivePrices,
   extractSessionUsage,
   findBillingPrice,
+  normalizePricingOverrides,
   normalizeUsdToCny,
   resolveBillingPrice,
   USAGE_ROUTE,
@@ -492,6 +522,7 @@ export type {
   BillingPrice,
   BillingUnknownReason,
   BillingUsage,
+  PricingOverrideInput,
   UsageAllSuccess,
   UsageApiResponse,
   UsageDayAggregate,

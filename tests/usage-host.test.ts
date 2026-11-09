@@ -189,4 +189,44 @@ describe('usage Host route', () => {
     expect(JSON.stringify(value)).not.toContain('super-secret')
     expect(close).toHaveBeenCalledOnce()
   })
+
+  it('prices requests with configured overrides and refuses invalid override rows', async () => {
+    const session = makeSession()
+    const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>()
+    const open = vi.fn(async () => ({ id: session.header.id, header: session.header, inheritedEventCount: 0, read: async () => ({ events: session.events }), close: vi.fn(async () => {}) }))
+    const ctx = {
+      credentials: { resolve: vi.fn() },
+      sessionPersistence: { list: async () => [{ header: session.header, revision: 'r1' }], open },
+      webServer: { register: vi.fn(({ path, handler }: { path: string; handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> }) => { routes.set(path, handler) }) },
+      effect: (factory: () => unknown) => factory(),
+      logger: { warn: vi.fn() },
+    } as unknown as Context
+    // 1M input + 1M output at the built-in V4 rates would be 0.22 + 0.66 = 0.88 USD.
+    apply(ctx, {
+      apiKeyRef: 'DEEPSEEK_API_KEY',
+      baseUrl: 'https://api.deepseek.com',
+      timeoutMs: 1000,
+      cacheMs: 30_000,
+      allowRemote: false,
+      pricingOverrides: [{ provider: 'deepseek', model: 'deepseek-v4-flash', cacheHitUsdPerMillion: 0, cacheMissUsdPerMillion: 1, outputUsdPerMillion: 2 }],
+    })
+    const handler = routes.get('/dsh-balance/api/usage')!
+    const priced = response()
+    await handler({ method: 'GET', url: '/dsh-balance/api/usage?timeZone=UTC', headers: { host: '127.0.0.1' } } as unknown as IncomingMessage, priced.result)
+    expect(priced.value()).toMatchObject({ ok: true, summary: { totals: { costUsd: 3 } } })
+
+    const detailed = response()
+    await handler({ method: 'GET', url: '/dsh-balance/api/usage?scope=session&sessionId=live-session&timeZone=UTC', headers: { host: '127.0.0.1' } } as unknown as IncomingMessage, detailed.result)
+    expect(detailed.value()).toMatchObject({ ok: true, requests: [{ costUsd: 3, pricingVersion: 'pricing-override' }] })
+
+    // An incomplete rate triple refuses to load instead of silently mispricing.
+    expect(() => apply(ctx, {
+      apiKeyRef: 'DEEPSEEK_API_KEY',
+      baseUrl: 'https://api.deepseek.com',
+      timeoutMs: 1000,
+      cacheMs: 30_000,
+      allowRemote: false,
+      pricingOverrides: [{ provider: 'deepseek', model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 1 }],
+    })).toThrow('完整')
+  })
 })

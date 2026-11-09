@@ -73,6 +73,74 @@ export const BILLING_PRICES: readonly BillingPrice[] = [
   })),
 ]
 
+/** One user-configured price row; a complete USD or CNY triple is required. */
+export interface PricingOverrideInput {
+  provider: string
+  model: string
+  effectiveFrom?: string
+  cacheHitUsdPerMillion?: number
+  cacheMissUsdPerMillion?: number
+  outputUsdPerMillion?: number
+  cacheHitCnyPerMillion?: number
+  cacheMissCnyPerMillion?: number
+  outputCnyPerMillion?: number
+}
+
+/** Validate configured overrides once at startup; invalid rows refuse to load. */
+export function normalizePricingOverrides(value: readonly PricingOverrideInput[] | undefined): BillingPrice[] {
+  return (value ?? []).map(override => {
+    const providerId = findBalanceProvider(override.provider)?.id
+    if (providerId === undefined) throw new Error(`dsh-balance: pricingOverrides 使用了未知提供方 ${override.provider}`)
+    if (override.model.trim().length === 0) throw new Error('dsh-balance: pricingOverrides 缺少模型 ID')
+    const parsedFrom = override.effectiveFrom === undefined ? 0 : Date.parse(override.effectiveFrom)
+    if (!Number.isFinite(parsedFrom)) {
+      throw new Error(`dsh-balance: pricingOverrides 的 effectiveFrom 不是有效时间：${override.effectiveFrom}`)
+    }
+    const effectiveFrom = new Date(parsedFrom).toISOString()
+    const usd = [override.cacheHitUsdPerMillion, override.cacheMissUsdPerMillion, override.outputUsdPerMillion]
+    const cny = [override.cacheHitCnyPerMillion, override.cacheMissCnyPerMillion, override.outputCnyPerMillion]
+    if (usd.every(rate => rate !== undefined) && cny.every(rate => rate === undefined)) {
+      return {
+        provider: providerId,
+        model: override.model,
+        effectiveFrom,
+        pricingVersion: 'pricing-override',
+        cacheHitUsdPerMillion: usd[0]!,
+        cacheMissUsdPerMillion: usd[1]!,
+        outputUsdPerMillion: usd[2]!,
+      }
+    }
+    if (cny.every(rate => rate !== undefined) && usd.every(rate => rate === undefined)) {
+      return {
+        provider: providerId,
+        model: override.model,
+        effectiveFrom,
+        pricingVersion: 'pricing-override',
+        currency: 'CNY' as const,
+        cacheHitCnyPerMillion: cny[0]!,
+        cacheMissCnyPerMillion: cny[1]!,
+        outputCnyPerMillion: cny[2]!,
+      }
+    }
+    throw new Error(`dsh-balance: pricingOverrides 的 ${override.provider}/${override.model} 需要完整的 USD 或 CNY 三项费率`)
+  })
+}
+
+/** Effective catalog for one provider: overrides replace same-model entries. */
+export function effectivePrices(providerId: string, overrides: readonly BillingPrice[] = []): BillingPrice[] {
+  const replaced = new Set(overrides.filter(price => price.provider === providerId).map(price => price.model))
+  const latest = new Map<string, BillingPrice>()
+  const candidates = [
+    ...BILLING_PRICES.filter(price => price.provider === providerId && !replaced.has(price.model)),
+    ...overrides.filter(price => price.provider === providerId),
+  ]
+  for (const price of candidates) {
+    const current = latest.get(price.model)
+    if (current === undefined || current.effectiveFrom <= price.effectiveFrom) latest.set(price.model, price)
+  }
+  return [...latest.values()].sort((a, b) => a.model.localeCompare(b.model))
+}
+
 export interface BillingUsage {
   inputTokens: number
   outputTokens: number
@@ -310,9 +378,13 @@ function messageMetadata(event: SessionEvent): { provider: string; model: string
     : undefined
 }
 
-/** Resolve the versioned price for one request. */
-export function resolveBillingPrice(provider: string, model: string, time: number): BillingPrice | undefined {
+/** Resolve the versioned price for one request; configured overrides win. */
+export function resolveBillingPrice(provider: string, model: string, time: number, overrides: readonly BillingPrice[] = []): BillingPrice | undefined {
   const providerId = findBalanceProvider(provider)?.id
+  const override = overrides
+    .filter(price => price.provider === providerId && price.model === model && Date.parse(price.effectiveFrom) <= time)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+  if (override !== undefined) return override
   if (providerId === 'stepfun' || providerId === 'tokener') return BILLING_PRICES.find(price => price.provider === providerId && price.model === model)
   if (providerId !== 'deepseek') return undefined
   const canonicalModel = model === 'deepseek-chat' || model === 'deepseek-reasoner'
@@ -385,7 +457,7 @@ export function extractSessionUsage(
   sessionId: string,
   inheritedEventCount: number,
   events: readonly SessionEvent[],
-  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'>,
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { pricingOverrides?: readonly BillingPrice[] | undefined },
 ): UsageRequestRecord[] {
   // The inherited prefix is still needed to recover the first live request's header,
   // but its assistant messages must never be charged again in a fork.
@@ -435,7 +507,7 @@ export function extractSessionUsage(
     if (usage === undefined) unknownReason = 'missing-usage'
     else if (provider === null || model === null) unknownReason = 'missing-request-metadata'
     else {
-      const price = resolveBillingPrice(provider, model, time)
+      const price = resolveBillingPrice(provider, model, time, options.pricingOverrides ?? [])
       if (price === undefined) unknownReason = findBalanceProvider(provider) !== undefined ? 'unknown-model' : 'unknown-provider'
       else if (provider === 'tokener' && usage.cacheWriteTokens > 0) unknownReason = 'unknown-cache-write-price'
       else {
@@ -578,19 +650,19 @@ export interface BillingRecordsSource {
 /** Aggregate one or many sessions for the settings page or session view. */
 export function aggregateBilling(
   sources: readonly BillingSource[],
-  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number },
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number; pricingOverrides?: readonly BillingPrice[] | undefined },
 ): { summary: UsageSummary; requestsBySession: ReadonlyMap<string, UsageRequestRecord[]> } {
   return aggregateBillingRecords(sources.map(source => ({
     sessionId: source.sessionId,
     title: source.title,
-    records: extractSessionUsage(source.sessionId, source.inheritedEventCount, source.events, { timeZone: options.timeZone }),
+    records: extractSessionUsage(source.sessionId, source.inheritedEventCount, source.events, { timeZone: options.timeZone, pricingOverrides: options.pricingOverrides }),
   })), options)
 }
 
 /** Filter cached request metadata without re-reading complete conversation logs. */
 export function aggregateBillingRecords(
   sources: readonly BillingRecordsSource[],
-  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number },
+  options: Pick<UsageQuery, 'timeZone' | 'from' | 'to' | 'provider'> & { usdToCny?: number; pricingOverrides?: readonly BillingPrice[] | undefined },
 ): { summary: UsageSummary; requestsBySession: ReadonlyMap<string, UsageRequestRecord[]> } {
   const records: UsageRequestRecord[] = []
   const titles = new Map<string, string>()

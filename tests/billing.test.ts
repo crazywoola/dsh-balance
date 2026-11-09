@@ -3,8 +3,10 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   aggregateBilling,
   calculateRequestCost,
+  effectivePrices,
   extractSessionUsage,
   findBillingPrice,
+  normalizePricingOverrides,
   normalizeUsdToCny,
   resolveBillingPrice,
 } from '../src/billing.ts'
@@ -355,5 +357,71 @@ describe('findBillingPrice', () => {
   it('returns undefined for unknown providers or models', () => {
     expect(findBillingPrice('deepseek', 'not-a-model')).toBeUndefined()
     expect(findBillingPrice('unknown', 'deepseek-v4-flash')).toBeUndefined()
+  })
+})
+
+describe('pricing overrides', () => {
+  const usd = { provider: 'deepseek', model: 'deepseek-v4-flash', cacheHitUsdPerMillion: 0.001, cacheMissUsdPerMillion: 0.01, outputUsdPerMillion: 0.02 }
+  const cny = { provider: 'StepFun', model: 'step-5-preview', cacheHitCnyPerMillion: 0.1, cacheMissCnyPerMillion: 1, outputCnyPerMillion: 3 }
+
+  it('normalizes complete USD and CNY rows and rejects incomplete ones', () => {
+    expect(normalizePricingOverrides([usd, cny])).toMatchObject([
+      { provider: 'deepseek', model: 'deepseek-v4-flash', pricingVersion: 'pricing-override', effectiveFrom: '1970-01-01T00:00:00.000Z' },
+      { provider: 'stepfun', model: 'step-5-preview', currency: 'CNY', outputCnyPerMillion: 3 },
+    ])
+    expect(normalizePricingOverrides(undefined)).toEqual([])
+    expect(() => normalizePricingOverrides([{ provider: 'deepseek', model: 'deepseek-v4-flash', cacheHitUsdPerMillion: 0.001, cacheMissUsdPerMillion: 0.01 }])).toThrow('完整')
+    expect(() => normalizePricingOverrides([{ ...usd, cacheHitCnyPerMillion: 1 }])).toThrow('完整')
+    expect(() => normalizePricingOverrides([{ provider: 'unknown', model: 'm', cacheHitUsdPerMillion: 1, cacheMissUsdPerMillion: 1, outputUsdPerMillion: 1 }])).toThrow('未知提供方')
+    expect(() => normalizePricingOverrides([{ ...usd, model: ' ' }])).toThrow('模型 ID')
+    expect(() => normalizePricingOverrides([{ ...usd, effectiveFrom: 'not-a-date' }])).toThrow('effectiveFrom')
+  })
+
+  it('prefers overrides in resolveBillingPrice, honoring effectiveFrom', () => {
+    const overrides = normalizePricingOverrides([{ ...usd, effectiveFrom: '2027-01-01T00:00:00Z' }])
+    expect(resolveBillingPrice('deepseek', 'deepseek-v4-flash', time('2027-06-01T00:00:00Z'), overrides)).toMatchObject({
+      cacheMissUsdPerMillion: 0.01,
+      pricingVersion: 'pricing-override',
+    })
+    // Before the override takes effect the built-in schedule still applies.
+    expect(resolveBillingPrice('deepseek', 'deepseek-v4-flash', time('2026-09-01T00:00:00Z'), overrides)).toMatchObject({ pricingVersion: 'deepseek-v4-2026-08-17' })
+    // The latest effective override wins.
+    const later = normalizePricingOverrides([usd, { ...usd, effectiveFrom: '2026-06-01T00:00:00Z', outputUsdPerMillion: 0.05 }])
+    expect(resolveBillingPrice('deepseek', 'deepseek-v4-flash', time('2026-07-01T00:00:00Z'), later)).toMatchObject({ outputUsdPerMillion: 0.05 })
+  })
+
+  it('builds the effective catalog with overrides replacing built-in rows', () => {
+    const overrides = normalizePricingOverrides([usd])
+    const prices = effectivePrices('deepseek', overrides)
+    const flash = prices.find(price => price.model === 'deepseek-v4-flash')
+    expect(flash).toMatchObject({ cacheMissUsdPerMillion: 0.01 })
+    // Built-in rows for other models survive, and each model appears once.
+    expect(prices.filter(price => price.model === 'deepseek-v4-flash')).toHaveLength(1)
+    expect(prices.map(price => price.model)).toContain('deepseek-v4-pro')
+    expect(effectivePrices('deepseek')).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.22 }))
+  })
+
+  it('prices extracted requests with overrides and labels their version', () => {
+    const overrides = normalizePricingOverrides([{ provider: 'deepseek', model: 'deepseek-v4-flash', cacheHitUsdPerMillion: 0, cacheMissUsdPerMillion: 1, outputUsdPerMillion: 1 }])
+    const events = [
+      requestHeader(0, '2026-08-17T00:00:00Z'),
+      stepStart(1),
+      assistant(2, { inputTokens: 1_000_000, outputTokens: 1_000_000 }, 1, 0, '2026-08-17T00:00:01Z'),
+    ]
+    const [record] = extractSessionUsage('s', 0, events, { timeZone: 'UTC', pricingOverrides: overrides })
+    expect(record?.costUsd).toBe(2)
+    expect(record?.pricingVersion).toBe('pricing-override')
+    expect(record?.billingStatus).toBe('priced')
+  })
+
+  it('threads overrides through aggregateBilling', () => {
+    const overrides = normalizePricingOverrides([{ provider: 'deepseek', model: 'deepseek-v4-flash', cacheHitUsdPerMillion: 0, cacheMissUsdPerMillion: 2, outputUsdPerMillion: 0 }])
+    const events = [
+      requestHeader(0, '2026-08-17T00:00:00Z'),
+      stepStart(1),
+      assistant(2, { inputTokens: 1_000_000, outputTokens: 0 }, 1, 0, '2026-08-17T00:00:01Z'),
+    ]
+    const { summary } = aggregateBilling([{ sessionId: 's', title: 'S', inheritedEventCount: 0, events }], { timeZone: 'UTC', pricingOverrides: overrides })
+    expect(summary.totals.costUsd).toBe(2)
   })
 })
