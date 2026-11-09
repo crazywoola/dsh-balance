@@ -21,12 +21,32 @@ export interface BalancePayload {
   balanceInfos: BalanceInfo[]
 }
 
+/** One in-process balance observation, kept for the trend view. */
+export interface BalanceHistoryPoint {
+  fetchedAt: string
+  isAvailable: boolean | null
+  /** Same currency order as balanceInfos; one row per reported currency. */
+  balances: { currency: string; totalBalance: string }[]
+}
+
+/** A configured low-balance threshold the response fell below. */
+export interface BalanceThresholdBreach {
+  currency: string
+  totalBalance: string
+  /** The configured threshold, in the same currency. */
+  amount: number
+}
+
 /** A successful, browser-safe balance response. */
 export interface BalanceSuccess extends BalancePayload {
   ok: true
   provider?: string
   fetchedAt: string
   source: 'live' | 'cache'
+  /** Oldest-first in-process observations, once at least two live queries completed. */
+  history?: BalanceHistoryPoint[]
+  /** Configured thresholds this response breaches; absent without configuration. */
+  lowBalance?: BalanceThresholdBreach[]
 }
 
 export type ApiErrorCode =

@@ -42,6 +42,10 @@ export const balanceStyles = `
 .dsh-balance-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--ledger-muted); }
 .dsh-balance-currency { font-size: 12px; padding: 3px 6px; border: .5px solid var(--ledger-line); border-radius: 4px; }
 .dsh-balance-total { margin: 20px 0; font-size: 36px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dsh-balance-sparkline { display: block; width: 100%; height: 28px; margin-top: 12px; }
+.dsh-balance-sparkline polyline { fill: none; stroke: var(--dsw-alias-state-business-primary, #4d6bfe); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.dsh-balance-sparkline circle { fill: var(--dsw-alias-state-business-primary, #4d6bfe); }
+.dsh-billing-coverage strong { color: var(--dsw-alias-state-warn-primary, #d99525); }
 .dsh-balance-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding-top: 16px; border-top: 1px solid var(--ledger-line); }
 .dsh-balance-breakdown dt { font-size: 12px; color: var(--ledger-muted); line-height: 1.5; }
 .dsh-balance-breakdown dd { margin: 6px 0 0; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -59,6 +63,10 @@ export const balanceStyles = `
   .dsh-billing-list-value { text-align: left; align-items: flex-start; }
 }
 .dsh-billing-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.dsh-billing-dates { display: inline-flex; align-items: center; gap: 6px; }
+.dsh-billing-dates input { min-height: 32px; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md, 8px); padding: 0 8px; background: transparent; color: var(--ledger-ink); font: inherit; font-size: 13px; }
+.dsh-billing-dates input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
+.dsh-billing-compare { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.35; }
 .dsh-usage-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 6px 12px; border: 1px solid var(--dsw-alias-border-l2, #e3e4e7); border-radius: var(--dsw-radius-md, 8px); background: var(--dsw-alias-bg-layer-3, #fafafa); color: var(--dsw-alias-label-primary, #202124); font: inherit; font-size: 13px; cursor: pointer; }
 .dsh-usage-select:hover, .dsh-usage-select[aria-expanded='true'] { background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 6%, transparent)); }
 .dsh-usage-select { min-width: 0; max-width: 100%; }
@@ -212,6 +220,8 @@ export const balanceStyles = `
   overflow-wrap: anywhere;
 }
 .dsh-model-owner { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-model-price { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-model-price[data-known='false'] { font-style: italic; opacity: .75; }
 .dsh-balance-dock {
   box-sizing: border-box;
   display: block;
@@ -244,6 +254,7 @@ export const balanceStyles = `
 .dsh-balance-dock-dot[data-state='available'][data-peak='true'] { background: var(--dsw-alias-state-warn-primary); }
 .dsh-balance-dock-dot[data-state='empty'],
 .dsh-balance-dock-dot[data-state='error'] { background: var(--dsw-alias-state-error-primary); }
+.dsh-balance-dock-dot[data-low='true'] { background: var(--dsw-alias-state-warn-primary); }
 .dsh-balance-dock-separator {
   margin: 0 10px;
   color: var(--dsw-alias-separator-primary);

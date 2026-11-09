@@ -63,3 +63,46 @@ describe('queryDeepSeekBalance', () => {
     })).rejects.toMatchObject({ code: 'INVALID_API_KEY', httpStatus: 401 })
   })
 })
+
+describe('upstream retries', () => {
+  const options = { apiKey: 'k', baseUrl: 'https://api.deepseek.com', timeoutMs: 1_000 }
+
+  it('retries a rate-limited response and honors Retry-After', async () => {
+    const sleeps: number[] = []
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'retry-after': '2' } }))
+      .mockResolvedValueOnce(Response.json(fixture))
+    await expect(queryDeepSeekBalance({ ...options, fetchImpl: fetchImpl as never, sleep: async ms => { sleeps.push(ms) } }))
+      .resolves.toEqual(parseDeepSeekBalance(fixture))
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(sleeps).toEqual([2_000])
+  })
+
+  it('retries transient network errors with exponential backoff', async () => {
+    const sleeps: number[] = []
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockResolvedValueOnce(Response.json(fixture))
+    await expect(queryDeepSeekBalance({ ...options, fetchImpl: fetchImpl as never, sleep: async ms => { sleeps.push(ms) } }))
+      .resolves.toEqual(parseDeepSeekBalance(fixture))
+    expect(sleeps).toEqual([300])
+  })
+
+  it('gives up after three attempts and classifies the last response', async () => {
+    const fetchImpl = vi.fn(async () => new Response('', { status: 503 }))
+    await expect(queryDeepSeekBalance({ ...options, fetchImpl: fetchImpl as never, sleep: async () => {} }))
+      .rejects.toMatchObject({ code: 'UPSTREAM_UNAVAILABLE', httpStatus: 502 })
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('never retries an authentication failure or a timeout', async () => {
+    const auth = vi.fn(async () => new Response('', { status: 401 }))
+    await expect(queryDeepSeekBalance({ ...options, fetchImpl: auth as never, sleep: async () => {} }))
+      .rejects.toMatchObject({ code: 'INVALID_API_KEY' })
+    expect(auth).toHaveBeenCalledOnce()
+    const timeout = vi.fn(async () => { throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }) })
+    await expect(queryDeepSeekBalance({ ...options, fetchImpl: timeout as never, sleep: async () => {} }))
+      .rejects.toMatchObject({ code: 'UPSTREAM_TIMEOUT' })
+    expect(timeout).toHaveBeenCalledOnce()
+  })
+})

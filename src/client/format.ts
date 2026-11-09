@@ -26,3 +26,16 @@ export function displayDate(value: string | Date, locale: string, timeZone?: str
   const date = typeof value === 'string' ? new Date(value.length === 10 ? `${value}T12:00:00Z` : value) : value
   return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric', ...(timeZone === undefined ? {} : { timeZone }) }).format(date)
 }
+
+/** Per-million-token rate with enough precision for sub-cent prices. */
+export function displayRate(value: number, currency: string, locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 6,
+    }).format(value)
+  } catch {
+    return `${value} ${currency}`
+  }
+}

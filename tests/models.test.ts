@@ -59,9 +59,27 @@ describe('queryDeepSeekModels', () => {
   })
 })
 
+describe('model upstream retries', () => {
+  it('retries a transient upstream failure before succeeding', async () => {
+    const sleeps: number[] = []
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(Response.json(fixture))
+    await expect(queryDeepSeekModels({
+      apiKey: 'k',
+      baseUrl: 'https://api.deepseek.com',
+      timeoutMs: 1_000,
+      fetchImpl: fetchImpl as never,
+      sleep: async ms => { sleeps.push(ms) },
+    })).resolves.toEqual(parseDeepSeekModels(fixture))
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(sleeps).toEqual([300])
+  })
+})
+
 describe('StepFun models', () => {
   const stepfun = { object: 'list', data: [{ id: 'step-3.5-flash', object: 'model', created: 1713974400, owned_by: 'stepai' }] }
-  const options = { apiKey: 'stepfun-test-key', baseUrl: 'https://api.stepfun.com/v1', timeoutMs: 1000 }
+  const options = { apiKey: 'stepfun-test-key', baseUrl: 'https://api.stepfun.com/v1', timeoutMs: 1000, sleep: async () => {} }
 
   it.each(['StepFun', 'stepfun', 'STEPFUN'])('queries the official list API for %s and parses Model objects', async (provider) => {
     const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(stepfun))

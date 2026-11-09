@@ -137,6 +137,7 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
   const label = providerName === undefined ? t('nav.balance')
     : t(provider !== undefined && !findBalanceProvider(provider)?.supportsBalance ? 'dock.usageLabel' : 'dock.label', { provider: providerName })
 
+  const lowBalance = result?.ok === true && (result.lowBalance?.length ?? 0) > 0
   const pricingActive = provider === 'deepseek' && now.getTime() >= PEAK_EFFECTIVE_FROM
   const isPeak = pricingActive && isPeakHour(now)
   const periodLabel = pricingActive ? t(isPeak ? 'pricing.peak' : 'pricing.offPeak') : undefined
@@ -152,9 +153,9 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
       role="status"
       aria-live="polite"
       title={periodTitle}
-      aria-label={`${label}${model === undefined ? '' : ` / ${model}`}: ${summary}${accessibleState === undefined ? '' : `. ${accessibleState}`}${periodLabel === undefined ? '' : `. ${periodLabel}`}`}
+      aria-label={`${label}${model === undefined ? '' : ` / ${model}`}: ${summary}${accessibleState === undefined ? '' : `. ${accessibleState}`}${periodLabel === undefined ? '' : `. ${periodLabel}`}${lowBalance ? `. ${t('dock.lowBalance')}` : ''}`}
     >
-      <span className="dsh-balance-dock-dot" data-state={state} data-peak={isPeak ? 'true' : undefined} aria-hidden="true" />
+      <span className="dsh-balance-dock-dot" data-state={state} data-peak={isPeak ? 'true' : undefined} data-low={lowBalance ? 'true' : undefined} aria-hidden="true" />
       <span>{label}</span>
       {model === undefined ? null : <code className="dsh-balance-dock-model" title={model}>{model}</code>}
       <span className="dsh-balance-dock-separator" aria-hidden="true">|</span>

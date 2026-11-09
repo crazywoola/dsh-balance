@@ -5,11 +5,15 @@ import type { ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BalanceDock } from '../src/client/BalanceDock.tsx'
 import type { BalanceDockInjected, BalanceDockProps } from '../src/client/BalanceDock.tsx'
-import { BillingOverview, BillingView } from '../src/client/BillingTab.tsx'
+import { BillingOverview, BillingView, isDateValue, monthProjection, PeriodComparison, primaryMetric, resolveUsageDates, shiftDate } from '../src/client/BillingTab.tsx'
 import { Dropdown } from '../src/client/Dropdown.tsx'
-import type { BillingViewProps, UsageTabInjected } from '../src/client/BillingTab.tsx'
+import type { BillingViewProps, UsageLoadOptions, UsageTabInjected } from '../src/client/BillingTab.tsx'
+import { BalanceSection } from '../src/client/BalanceTab.tsx'
+import type { BalanceTabInjected } from '../src/client/BalanceTab.tsx'
+import { ModelsSection } from '../src/client/ModelsTab.tsx'
+import type { ModelsTabInjected } from '../src/client/ModelsTab.tsx'
 import type { BalanceApiResponse } from '../src/types.ts'
-import type { UsageApiResponse, UsageTotals } from '../src/billing.ts'
+import type { UsageApiResponse, UsageSummary, UsageTotals } from '../src/billing.ts'
 import { en } from '../src/client/locales.ts'
 
 const t: BalanceDockProps['t'] = (key, values) => Object.entries(values ?? {}).reduce(
@@ -288,4 +292,142 @@ it('recognizes Tokener in the composer without requesting an undocumented balanc
   await act(async () => { vi.advanceTimersByTime(60_000) })
   expect(loadBalance).toHaveBeenCalledOnce()
   expect(root.root.findByProps({ className: 'dsh-balance-dock-dot' }).props['data-state']).toBe('unknown')
+})
+
+describe('usage range and time-zone helpers', () => {
+  it('resolves presets, custom ranges and invalid input', () => {
+    expect(resolveUsageDates('all', { from: '', to: '' }, '2026-11-09')).toEqual({})
+    expect(resolveUsageDates('today', { from: '', to: '' }, '2026-11-09')).toEqual({ from: '2026-11-09', to: '2026-11-09' })
+    expect(resolveUsageDates('7d', { from: '', to: '' }, '2026-11-09')).toEqual({ from: '2026-11-03', to: '2026-11-09' })
+    expect(resolveUsageDates('30d', { from: '', to: '' }, '2026-11-09')).toEqual({ from: '2026-10-11', to: '2026-11-09' })
+    expect(resolveUsageDates('custom', { from: '2026-10-01', to: '2026-10-31' }, '2026-11-09')).toEqual({ from: '2026-10-01', to: '2026-10-31' })
+    expect(resolveUsageDates('custom', { from: '2026-10-31', to: '2026-10-01' }, '2026-11-09')).toBeUndefined()
+    expect(resolveUsageDates('custom', { from: '', to: '2026-10-01' }, '2026-11-09')).toBeUndefined()
+    expect(resolveUsageDates('custom', { from: '2026-02-30', to: '2026-03-01' }, '2026-11-09')).toBeUndefined()
+  })
+
+  it('validates and shifts calendar dates', () => {
+    expect(isDateValue('2026-02-29')).toBe(false)
+    expect(isDateValue('2024-02-29')).toBe(true)
+    expect(isDateValue('2026-13-01')).toBe(false)
+    expect(shiftDate('2026-03-01', -1)).toBe('2026-02-28')
+    expect(shiftDate('2024-03-01', -1)).toBe('2024-02-29')
+    expect(shiftDate('2026-12-31', 1)).toBe('2027-01-01')
+  })
+
+  it('leads with USD unless every priced request is native CNY or nothing is priced', () => {
+    const base = { requests: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    expect(primaryMetric({ ...base, pricedRequests: 1, freeRequests: 0, unpricedRequests: 0, costUsd: 2, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0, hasCompleteCnyTotal: true }))
+      .toEqual({ value: 2, currency: 'USD', unpriced: false })
+    expect(primaryMetric({ ...base, pricedRequests: 1, freeRequests: 0, unpricedRequests: 0, costUsd: 0, costCny: 14, nativeCostCny: 14, cnyPricedRequests: 1, hasCompleteCnyTotal: false }))
+      .toEqual({ value: 14, currency: 'CNY', unpriced: false })
+    expect(primaryMetric({ ...base, pricedRequests: 0, freeRequests: 0, unpricedRequests: 3, costUsd: 0, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0, hasCompleteCnyTotal: true }))
+      .toEqual({ value: null, currency: 'USD', unpriced: true })
+  })
+
+  it('projects the current month from month-to-date spend', () => {
+    const totals: UsageTotals = { requests: 2, pricedRequests: 2, freeRequests: 0, unpricedRequests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 3, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0, hasCompleteCnyTotal: true }
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    const elapsed = Number(today.slice(8, 10))
+    const total = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate()
+    const summary = { timeZone: 'UTC', usdToCny: null, cnyTotalMode: 'unavailable', totals, byProvider: [], byModel: [], bySession: [], byWeekdayHour: [], byDay: [{ ...totals, date: today }] } as UsageSummary
+    expect(monthProjection(summary)).toEqual({ amount: 3 / elapsed * total, elapsed, total })
+    expect(monthProjection({ ...summary, byDay: [] })).toBeUndefined()
+  })
+})
+
+describe('period comparison', () => {
+  const previousOptions: UsageLoadOptions = { scope: 'all', timeZone: 'UTC', from: '2026-10-25', to: '2026-10-31' }
+  const totals = (costUsd: number): UsageTotals => ({ requests: 1, pricedRequests: 1, freeRequests: 0, unpricedRequests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd, costCny: null, nativeCostCny: 0, cnyPricedRequests: 0, hasCompleteCnyTotal: true })
+  const all = (costUsd: number): UsageApiResponse => ({ ok: true, scope: 'all', fetchedAt: new Date().toISOString(), source: 'live', summary: { timeZone: 'UTC', usdToCny: null, cnyTotalMode: 'unavailable', totals: totals(costUsd), byProvider: [], byModel: [], bySession: [], byWeekdayHour: [], byDay: [] } })
+
+  async function render(current: UsageApiResponse | undefined, previous: UsageApiResponse) {
+    const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(previous)
+    let root!: ReactTestRenderer
+    await act(async () => { root = create(createElement(PeriodComparison, { load: loadUsage, previousOptions, current, t })); roots.push(root) })
+    return root
+  }
+
+  it('renders the delta against the previous period', async () => {
+    const root = await render(all(3), all(2))
+    expect(JSON.stringify(root.toJSON())).toContain('+50%')
+    expect(JSON.stringify(root.toJSON())).toContain('$2.00 → $3.00')
+  })
+
+  it('labels a previous period without records, flat periods and incomparable currencies', async () => {
+    expect(JSON.stringify((await render(all(3), all(0))).toJSON())).toContain('No records in the previous period')
+    expect(JSON.stringify((await render(all(2), all(2))).toJSON())).toContain('Roughly flat')
+    const cny = all(0)
+    if (!cny.ok || cny.scope !== 'all') throw new Error('invalid fixture')
+    cny.summary.totals = { ...cny.summary.totals, nativeCostCny: 14, cnyPricedRequests: 1, costCny: 14 }
+    expect(JSON.stringify((await render(cny, all(2))).toJSON())).toBe('null')
+  })
+
+  it('stays silent without a current result and reports an unavailable previous period', async () => {
+    expect(JSON.stringify((await render(undefined, all(2))).toJSON())).toBe('null')
+    expect(JSON.stringify((await render(all(2), { ok: false, code: 'UPSTREAM_UNAVAILABLE', message: '' })).toJSON())).toContain('No comparable data')
+  })
+})
+
+it('projects the current month under the total cost card', async () => {
+  const result = usage(10)
+  if (!result.ok || result.scope !== 'all') throw new Error('invalid fixture')
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  result.summary.totals = { ...result.summary.totals, pricedRequests: 1, unpricedRequests: 0, costUsd: 3, hasCompleteCnyTotal: true }
+  result.summary.byDay = [{ ...result.summary.totals, date: today }]
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue(result)
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingOverview, { loadUsage, t })); roots.push(root) })
+  expect(JSON.stringify(root.toJSON())).toContain('Projected this month')
+})
+
+it('annotates catalogued model prices and marks unknown ones', async () => {
+  const loadModels = vi.fn<ModelsTabInjected['loadModels']>().mockResolvedValue({
+    ok: true,
+    provider: 'deepseek',
+    fetchedAt: new Date().toISOString(),
+    source: 'live',
+    models: [
+      { id: 'deepseek-v4-flash', ownedBy: 'deepseek' },
+      { id: 'deepseek-chat', ownedBy: 'deepseek' },
+      { id: 'mystery-model', ownedBy: 'deepseek' },
+    ],
+  })
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(ModelsSection, { provider: 'deepseek', loadModels, t })); roots.push(root) })
+  const json = JSON.stringify(root.toJSON())
+  expect(json).toContain('Input $0.22 · Output $0.66 per million tokens')
+  expect(json).toContain('Pricing not catalogued')
+})
+
+it('renders the balance trend and low-balance warnings in settings', async () => {
+  const loadBalance = vi.fn<BalanceTabInjected['loadBalance']>().mockResolvedValue({
+    ok: true,
+    provider: 'deepseek',
+    fetchedAt: new Date().toISOString(),
+    source: 'live',
+    isAvailable: true,
+    balanceInfos: [{ currency: 'USD', totalBalance: '3.50' }],
+    history: [
+      { fetchedAt: new Date(Date.now() - 7_200_000).toISOString(), isAvailable: true, balances: [{ currency: 'USD', totalBalance: '10.00' }] },
+      { fetchedAt: new Date().toISOString(), isAvailable: true, balances: [{ currency: 'USD', totalBalance: '3.50' }] },
+    ],
+    lowBalance: [{ currency: 'USD', totalBalance: '3.50', amount: 5 }],
+  })
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BalanceSection, { provider: 'deepseek', loadBalance, t })); roots.push(root) })
+  const json = JSON.stringify(root.toJSON())
+  expect(json).toContain('dsh-balance-sparkline')
+  expect(json).toContain('Balance below threshold')
+  expect(json).toContain('USD balance $3.50 is below $5.00')
+})
+
+it('flags a low balance in the composer dock', async () => {
+  const lowBalance: BalanceApiResponse = { ok: true, fetchedAt: new Date().toISOString(), source: 'live', isAvailable: true, balanceInfos: [{ currency: 'USD', totalBalance: '3' }], lowBalance: [{ currency: 'USD', totalBalance: '3', amount: 5 }] }
+  const loadBalance = vi.fn<BalanceDockInjected['loadBalance']>().mockResolvedValue(lowBalance)
+  const selection = directory()
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BalanceDock, dockProps(selection, loadBalance))); roots.push(root) })
+  expect(root.root.findByProps({ className: 'dsh-balance-dock-dot' }).props['data-low']).toBe('true')
+  expect(root.root.findByProps({ className: 'dsh-balance-dock' }).props['aria-label']).toContain('Low balance')
 })

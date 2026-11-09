@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelInfo, ModelsApiResponse } from '../types.ts'
 import { findBalanceProvider } from '../providers.ts'
+import { findBillingPrice } from '../billing.ts'
+import { displayRate } from './format.ts'
 import type { BalanceProviderId } from '../providers.ts'
 import { errorLocaleKey } from './locales.ts'
 import type { LOCALE_NS } from './locales.ts'
@@ -12,12 +14,22 @@ export interface ModelsTabInjected {
 
 export type ModelsTabProps = ModelsTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: BalanceProviderId }
 
-function ModelCard({ model, t }: { model: ModelInfo; t: ModelsTabProps['t'] }) {
+function ModelCard({ model, provider, t }: { model: ModelInfo; provider: BalanceProviderId; t: ModelsTabProps['t'] }) {
+  const price = findBillingPrice(provider, model.id)
+  const currency = price?.currency ?? 'USD'
+  const inputRate = price === undefined ? 0 : price.currency === 'CNY' ? price.cacheMissCnyPerMillion : price.cacheMissUsdPerMillion
+  const outputRate = price === undefined ? 0 : price.currency === 'CNY' ? price.outputCnyPerMillion : price.outputUsdPerMillion
   return (
     <article className="dsh-model-card">
       <code className="dsh-model-id">{model.id}</code>
       <span className="dsh-model-owner">{t('models.owner', { owner: model.ownedBy })}</span>
       {model.created === undefined ? null : <span className="dsh-model-owner">{t('models.created', { date: new Date(model.created * 1000).toLocaleDateString(t('locale.tag')) })}</span>}
+      <span className="dsh-model-price" data-known={price === undefined ? 'false' : 'true'}>
+        {price === undefined ? t('models.priceUnknown') : t('models.price', {
+          input: displayRate(inputRate, currency, t('locale.tag')),
+          output: displayRate(outputRate, currency, t('locale.tag')),
+        })}
+      </span>
     </article>
   )
 }
@@ -76,7 +88,7 @@ export function ModelsSection({ loadModels, t, provider = 'deepseek' }: ModelsTa
             <span>{t('models.count', { count: result.models.length })}</span>
           </div>
           {result.models.length > 0
-            ? <div className="dsh-model-grid">{result.models.map(model => <ModelCard key={model.id} model={model} t={t} />)}</div>
+            ? <div className="dsh-model-grid">{result.models.map(model => <ModelCard key={model.id} model={model} provider={provider} t={t} />)}</div>
             : <p className="dsh-balance-status">{t('models.empty')}</p>}
           <p className="dsh-balance-meta">
             {t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}

@@ -21,6 +21,10 @@ The composer readout follows the current session’s provider and model. The Set
 - Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time
 - Show native USD and CNY costs separately; `usdToCny` enables a combined CNY total
 - Cache query results with manual refresh support
+- Annotate the model list with catalogued reference rates (input/output per million tokens); models without published pricing are marked explicitly
+- Show a recent balance trend (the last 48 in-process observations) in Settings and optional per-currency low-balance warnings (`lowBalance`), mirrored below the composer
+- Custom date ranges and twelve common time zones (browser default); month-to-date projection at the current pace, plus a comparison with the immediately preceding period for bounded ranges
+- Retry balance and model queries on 429 / 5xx (honoring `Retry-After`, exponential backoff, at most three attempts)
 - Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00, 14:00–18:00 Beijing time)
 - Native Simplified Chinese and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness

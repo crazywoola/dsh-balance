@@ -12,7 +12,9 @@ import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
 import { BALANCE_PROVIDERS, findBalanceProvider } from './providers.ts'
 import type {
   BalanceApiResponse,
+  BalanceHistoryPoint,
   BalanceSuccess,
+  BalanceThresholdBreach,
   ModelsApiResponse,
   ModelsSuccess,
 } from './types.ts'
@@ -41,6 +43,8 @@ export interface Config {
   cacheMs: number
   allowRemote: boolean
   usdToCny?: number
+  /** Per-currency low-balance thresholds surfaced in responses; absent disables warnings. */
+  lowBalance?: { currency: string; amount: number }[]
 }
 
 export const Config: z<Config> = z.object({
@@ -55,6 +59,10 @@ export const Config: z<Config> = z.object({
   cacheMs: z.number().step(1).min(0).max(300_000).default(30_000),
   allowRemote: z.boolean().default(false),
   usdToCny: z.number().min(0.000001).max(1_000_000).required(false),
+  lowBalance: z.array(z.object({
+    currency: z.string().required(),
+    amount: z.number().min(0).required(),
+  })).required(false),
 })
 
 function validateBaseUrl(value: string): void {
@@ -146,6 +154,38 @@ async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number
   return result
 }
 
+/** Live balance observations kept per provider for the trend view. */
+const BALANCE_HISTORY_LIMIT = 48
+
+/** Append one live observation and return the oldest-first history for the provider. */
+function recordBalanceHistory(history: Map<string, BalanceHistoryPoint[]>, providerId: string, value: BalanceSuccess): BalanceHistoryPoint[] {
+  const point: BalanceHistoryPoint = {
+    fetchedAt: value.fetchedAt,
+    isAvailable: value.isAvailable,
+    balances: value.balanceInfos.map(info => ({ currency: info.currency, totalBalance: info.totalBalance })),
+  }
+  const points = [...(history.get(providerId) ?? []), point].slice(-BALANCE_HISTORY_LIMIT)
+  history.set(providerId, points)
+  return points
+}
+
+/** Configured thresholds the response breaches; currencies compare case-insensitively. */
+function thresholdBreaches(config: Config, value: BalanceSuccess): BalanceThresholdBreach[] {
+  return (config.lowBalance ?? []).flatMap(rule => value.balanceInfos
+    .filter(info => info.currency.toUpperCase() === rule.currency.toUpperCase() && Number(info.totalBalance) < rule.amount)
+    .map(info => ({ currency: info.currency, totalBalance: info.totalBalance, amount: rule.amount })))
+}
+
+/** Attach the in-process trend and threshold breaches to a live or cached response. */
+function decorateBalance(config: Config, value: BalanceSuccess, history: readonly BalanceHistoryPoint[]): BalanceSuccess {
+  const lowBalance = thresholdBreaches(config, value)
+  return {
+    ...value,
+    ...(history.length >= 2 ? { history: [...history] } : {}),
+    ...(lowBalance.length > 0 ? { lowBalance } : {}),
+  }
+}
+
 /** Register the Host route that keeps credentials and upstream access out of the browser. */
 export function apply(ctx: Context, config: Config): void {
   validateBaseUrl(config.baseUrl)
@@ -174,6 +214,7 @@ export function apply(ctx: Context, config: Config): void {
   }
   const balanceCache = new Map<string, { expiresAt: number; value: BalanceSuccess }>()
   const modelsCache = new Map<string, { expiresAt: number; value: ModelsSuccess }>()
+  const balanceHistory = new Map<string, BalanceHistoryPoint[]>()
   let cachedUsage: { key: string; expiresAt: number; value: UsageAllSuccess | UsageSessionSuccess } | undefined
   const usageReader = new UsageReader(ctx.sessionPersistence)
 
@@ -202,7 +243,7 @@ export function apply(ctx: Context, config: Config): void {
     const forceRefresh = requestUrl.searchParams.get('refresh') === '1'
     const cached = balanceCache.get(provider.id)
     if (!forceRefresh && cached !== undefined && cached.expiresAt > Date.now()) {
-      sendJson(res, 200, { ...cached.value, source: 'cache' })
+      sendJson(res, 200, decorateBalance(config, { ...cached.value, source: 'cache' }, balanceHistory.get(provider.id) ?? []))
       return
     }
 
@@ -229,7 +270,8 @@ export function apply(ctx: Context, config: Config): void {
         source: 'live',
       }
       balanceCache.set(provider.id, { expiresAt: Date.now() + config.cacheMs, value })
-      sendJson(res, 200, value)
+      const history = recordBalanceHistory(balanceHistory, provider.id, value)
+      sendJson(res, 200, decorateBalance(config, value, history))
     } catch (error) {
       const failure = error instanceof BalanceQueryError
         ? error
@@ -427,17 +469,20 @@ export {
   BILLING_PRICING_VERSION,
   calculateRequestCost,
   extractSessionUsage,
+  findBillingPrice,
   normalizeUsdToCny,
   resolveBillingPrice,
   USAGE_ROUTE,
 } from './billing.ts'
 export type {
   ApiErrorCode,
+  BalanceHistoryPoint,
   BalancePayload,
   BalanceApiResponse,
   BalanceFailure,
   BalanceInfo,
   BalanceSuccess,
+  BalanceThresholdBreach,
   ModelInfo,
   ModelsApiResponse,
   ModelsFailure,

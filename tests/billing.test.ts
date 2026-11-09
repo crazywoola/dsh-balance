@@ -4,6 +4,7 @@ import {
   aggregateBilling,
   calculateRequestCost,
   extractSessionUsage,
+  findBillingPrice,
   normalizeUsdToCny,
   resolveBillingPrice,
 } from '../src/billing.ts'
@@ -339,5 +340,20 @@ describe('Tokener usage', () => {
     const writes = extractSessionUsage('writes', 0, eventsFor('tokener', 'claude-sonnet-4-6', { inputTokens: 10, outputTokens: 2, cacheWriteTokens: 100 }), utcOptions)
     expect(writes[0]).toMatchObject({ cacheWriteTokens: 100, costUsd: null, billingStatus: 'unpriced', unknownReason: 'unknown-cache-write-price' })
     expect(extractSessionUsage('missing', 0, eventsFor('tokener', 'gpt-5.4', undefined), utcOptions)[0]?.unknownReason).toBe('missing-usage')
+  })
+})
+
+describe('findBillingPrice', () => {
+  it('returns the latest effective schedule for a known model', () => {
+    // API model names on the legacy schedule display their current V4 rates.
+    expect(findBillingPrice('deepseek', 'deepseek-chat')).toMatchObject({ model: 'deepseek-v4-flash', pricingVersion: 'deepseek-v4-2026-08-17' })
+    expect(findBillingPrice('deepseek', 'deepseek-reasoner')).toMatchObject({ model: 'deepseek-v4-flash' })
+    expect(findBillingPrice('StepFun', 'step-5-preview')).toMatchObject({ provider: 'stepfun', currency: 'CNY', outputCnyPerMillion: 20 })
+    expect(findBillingPrice('tokener.ai', 'claude-opus-5')).toMatchObject({ provider: 'tokener', outputUsdPerMillion: 25 })
+  })
+
+  it('returns undefined for unknown providers or models', () => {
+    expect(findBillingPrice('deepseek', 'not-a-model')).toBeUndefined()
+    expect(findBillingPrice('unknown', 'deepseek-v4-flash')).toBeUndefined()
   })
 })

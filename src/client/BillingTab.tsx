@@ -1,5 +1,6 @@
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   UsageApiResponse,
@@ -32,6 +33,24 @@ export interface UsageTabInjected {
 export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: string }
 export type BillingViewProps = PropsRuntime<'conversation.view'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
+export type UsageRange = 'today' | '7d' | '30d' | 'all' | 'custom'
+
+/** Zones offered by the time-zone selector; the browser default always leads. */
+const COMMON_TIME_ZONES = [
+  'UTC',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Singapore',
+  'Asia/Kolkata',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Australia/Sydney',
+] as const
+
 function formatTokens(value: number, locale = 'en-US'): string {
   return displayTokens(value, locale)
 }
@@ -51,10 +70,74 @@ function localDateKey(timeZone: string, date = new Date()): string {
   return `${values.year ?? '0000'}-${values.month ?? '00'}-${values.day ?? '00'}`
 }
 
-function dateDaysAgo(timeZone: string, days: number): string {
-  const local = new Date(`${localDateKey(timeZone)}T12:00:00Z`)
-  local.setUTCDate(local.getUTCDate() - days)
-  return local.toISOString().slice(0, 10)
+/** A strict YYYY-MM-DD calendar date, matching the Host validation. */
+export function isDateValue(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (match === null) return false
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  return date.toISOString().slice(0, 10) === value
+}
+
+/** Shift a calendar date by whole days, independent of the viewer's time zone. */
+export function shiftDate(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+/** A resolved bounded range; `{}` means all time. */
+export interface UsageDateRange {
+  from: string
+  to: string
+}
+
+/**
+ * Resolve the requested range into query dates in the given time zone.
+ * Omitted dates mean all time; `undefined` means the custom range is incomplete or inverted.
+ */
+export function resolveUsageDates(range: UsageRange, custom: { from: string; to: string }, today: string): { from?: string; to?: string } | undefined {
+  if (range === 'all') return {}
+  if (range === 'custom') {
+    if (!isDateValue(custom.from) || !isDateValue(custom.to) || custom.from > custom.to) return undefined
+    return { from: custom.from, to: custom.to }
+  }
+  const days = range === 'today' ? 0 : range === '7d' ? 6 : 29
+  return { from: shiftDate(today, -days), to: today }
+}
+
+function hasRange(dates: { from?: string; to?: string } | undefined): dates is UsageDateRange {
+  return dates?.from !== undefined && dates.to !== undefined
+}
+
+/** The one metric the cards lead with, so projection and comparison stay consistent. */
+export function primaryMetric(totals: UsageTotals): { value: number | null; currency: 'USD' | 'CNY'; unpriced: boolean } {
+  const unpriced = totals.pricedRequests === 0 && totals.freeRequests === 0 && totals.unpricedRequests > 0
+  const cnyOnly = totals.cnyPricedRequests > 0 && totals.pricedRequests === totals.cnyPricedRequests
+  return unpriced ? { value: null, currency: 'USD', unpriced }
+    : cnyOnly ? { value: totals.nativeCostCny, currency: 'CNY', unpriced: false }
+      : { value: totals.costUsd, currency: 'USD', unpriced: false }
+}
+
+/** Month-to-date spend scaled to the full month, in the summary's time zone. */
+export function monthProjection(summary: UsageSummary): { amount: number; elapsed: number; total: number } | undefined {
+  const today = localDateKey(summary.timeZone)
+  const elapsed = Number(today.slice(8, 10))
+  const total = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate()
+  if (!Number.isFinite(elapsed) || elapsed <= 0 || total <= 0) return undefined
+  const metric = primaryMetric(summary.totals)
+  if (metric.unpriced || metric.value === null) return undefined
+  const monthKey = today.slice(0, 7)
+  let spent = 0
+  let seen = false
+  for (const day of summary.byDay) {
+    if (!day.date.startsWith(monthKey)) continue
+    const dayMetric = primaryMetric(day)
+    if (dayMetric.unpriced || dayMetric.value === null || dayMetric.currency !== metric.currency) continue
+    spent += dayMetric.value
+    seen = true
+  }
+  if (!seen) return undefined
+  return { amount: spent / elapsed * total, elapsed, total }
 }
 
 function totalForDay(summary: UsageSummary, date: string): UsageTotals {
@@ -84,9 +167,9 @@ function ErrorMessage({ result, t }: { result: UsageApiResponse; t: BillingOverv
 
 function CostLabel({ totals, t, cnyTotalMode = 'unavailable' }: { totals: UsageTotals; t: BillingOverviewProps['t']; cnyTotalMode?: UsageSummary['cnyTotalMode'] }) {
   const locale = t('locale.tag')
-  const freeRequests = totals.freeRequests ?? 0
-  const unpriced = totals.pricedRequests === 0 && freeRequests === 0 && totals.unpricedRequests > 0
-  const cnyOnly = totals.cnyPricedRequests > 0 && totals.pricedRequests === totals.cnyPricedRequests
+  const metric = primaryMetric(totals)
+  const unpriced = metric.unpriced
+  const cnyOnly = !unpriced && metric.currency === 'CNY'
   const mixed = totals.cnyPricedRequests > 0 && !cnyOnly
   return (
     <div className="dsh-billing-cost-value">
@@ -98,14 +181,21 @@ function CostLabel({ totals, t, cnyTotalMode = 'unavailable' }: { totals: UsageT
   )
 }
 
-function SummaryCards({ summary, t }: { summary: UsageSummary; t: BillingOverviewProps['t'] }) {
+function SummaryCards({ summary, t, comparison }: { summary: UsageSummary; t: BillingOverviewProps['t']; comparison?: ReactNode }) {
   const today = totalForDay(summary, localDateKey(summary.timeZone))
+  const projection = monthProjection(summary)
+  const metric = primaryMetric(summary.totals)
+  const locale = t('locale.tag')
   return (
     <div className="dsh-billing-card-grid">
       <article className="dsh-billing-card dsh-billing-card-primary">
         <span>{t('billing.totalCost')}</span>
         <CostLabel totals={summary.totals} t={t} cnyTotalMode={summary.cnyTotalMode} />
+        {projection !== undefined && !metric.unpriced && metric.value !== null
+          ? <small title={t('billing.monthProjectionHint', projection)}>{t('billing.monthProjection', { amount: displayAmount(String(Math.round(projection.amount * 1e4) / 1e4), metric.currency, locale) })}</small>
+          : null}
         <small>{t('billing.pricedRequests', { count: summary.totals.pricedRequests })} · {t('billing.freeRequests' as DshBalanceLocaleKey, { count: summary.totals.freeRequests ?? 0 })}</small>
+        {comparison}
       </article>
       <article className="dsh-billing-card">
         <span>{t('billing.todayCost')}</span>
@@ -134,6 +224,36 @@ function TotalsCaption({ totals, t }: { totals: Pick<UsageTotals, 'inputTokens' 
     <span>{t('billing.cacheReadShort')} <b>{formatTokens(totals.cacheReadTokens, t('locale.tag'))}</b></span>
     {totals.cacheWriteTokens > 0 ? <span>{t('billing.cacheWriteShort')} <b>{formatTokens(totals.cacheWriteTokens, t('locale.tag'))}</b></span> : null}
   </span>
+}
+
+/** Previous-period delta under the total card; only meaningful for bounded ranges. */
+export function PeriodComparison({ load, previousOptions, current, t }: {
+  load: UsageTabInjected['loadUsage']
+  previousOptions: UsageLoadOptions
+  current: UsageApiResponse | undefined
+  t: BillingOverviewProps['t']
+}) {
+  const { result: previous } = useUsageResult(load, previousOptions, JSON.stringify(previousOptions))
+  const locale = t('locale.tag')
+  const now = current?.ok === true && current.scope === 'all' ? primaryMetric(current.summary.totals) : undefined
+  if (now === undefined || now.unpriced || now.value === null) return null
+  if (previous?.ok === false) return <small className="dsh-billing-compare">{t('billing.compareNA')}</small>
+  const before = previous?.ok === true && previous.scope === 'all' ? primaryMetric(previous.summary.totals) : undefined
+  if (before === undefined || before.unpriced) return null
+  if (before.value === null || before.value === 0) {
+    return now.value > 0 ? <small className="dsh-billing-compare">{t('billing.compareNew')}</small> : null
+  }
+  if (before.currency !== now.currency) return null
+  const delta = (now.value - before.value) / Math.abs(before.value) * 100
+  if (!Number.isFinite(delta)) return null
+  if (Math.abs(delta) < 0.5) return <small className="dsh-billing-compare">{t('billing.compareSame')}</small>
+  const round = (value: number) => displayAmount(String(Math.round(value * 1e4) / 1e4), before.currency, locale)
+  return <small className="dsh-billing-compare">{t('billing.compareDelta', {
+    sign: delta > 0 ? '+' : '−',
+    percent: Math.abs(delta).toFixed(0),
+    previous: round(before.value),
+    current: round(now.value),
+  })}</small>
 }
 
 function ModelRows({ summary, items = summary.byModel, t }: { summary: UsageSummary; items?: readonly UsageSummary['byModel'][number][]; t: BillingOverviewProps['t'] }) {
@@ -212,7 +332,7 @@ function RequestRows({ requests, t }: { requests: readonly UsageRequestRecord[];
           <div>
             <div className="dsh-billing-request-meta"><span>{new Date(request.time).toLocaleString(locale)}</span><span className="dsh-billing-provider-tag">{request.provider ?? '?'}</span></div>
             <code className="dsh-billing-name" title={`${request.provider ?? '?'} / ${request.model ?? t('billing.unknownModel')}`}>{request.model ?? t('billing.unknownModel')}</code>
-            {request.unknownReason !== undefined ? <small className="dsh-billing-secondary">{t(`billing.reason.${request.unknownReason}` as DshBalanceLocaleKey)}</small> : null}
+            {request.unknownReason !== undefined ? <small className="dsh-balance-secondary">{t(`billing.reason.${request.unknownReason}` as DshBalanceLocaleKey)}</small> : null}
           </div>
           <div>
             <TotalsCaption totals={request} t={t} />
@@ -268,25 +388,38 @@ function useUsageResult(loadUsage: UsageTabInjected['loadUsage'], options: Usage
 export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps) {
   const [providerScope, setProviderScope] = useState<'selected' | 'all'>('selected')
   const selectedProvider = providerScope === 'all' ? undefined : provider
-  const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
-  const [range, setRange] = useState<'today' | '7d' | '30d' | 'all'>('all')
-  const [filterProvider, setFilterProvider] = useState('')
-  const queryProvider = provider === undefined ? filterProvider || undefined : selectedProvider
-  const [day, setDay] = useState(() => localDateKey(timeZone))
+  const browserTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
+  const [timeZoneChoice, setTimeZoneChoice] = useState('browser')
+  const timeZone = timeZoneChoice === 'browser' ? browserTimeZone : timeZoneChoice
+  const [range, setRange] = useState<UsageRange>('all')
+  const [custom, setCustom] = useState(() => ({ from: shiftDate(localDateKey(browserTimeZone), -29), to: localDateKey(browserTimeZone) }))
+  const [day, setDay] = useState(() => localDateKey(browserTimeZone))
+  useEffect(() => { setDay(localDateKey(timeZone)) }, [timeZone])
   useEffect(() => {
     const timer = window.setInterval(() => setDay(localDateKey(timeZone)), 15_000)
-    return () => window.clearInterval(timer)
+    return () => { window.clearInterval(timer) }
   }, [timeZone])
+  const dates = useMemo(() => resolveUsageDates(range, custom, day), [range, custom, day])
+  // An incomplete custom range must not spend a Host query on dates it cannot use.
+  const customInvalid = range === 'custom' && dates === undefined
+  const [filterProvider, setFilterProvider] = useState('')
+  const queryProvider = provider === undefined ? filterProvider || undefined : selectedProvider
   const options = useMemo<UsageLoadOptions>(() => ({
     scope: 'all',
-    ...(queryProvider === undefined ? {} : { provider: queryProvider }),
     timeZone,
-    ...(range === 'all' ? {} : {
-      from: range === 'today' ? day : dateDaysAgo(timeZone, range === '7d' ? 6 : 29),
-      to: day,
-    }),
-  }), [range, timeZone, queryProvider, day])
-  const { result, loading, refresh } = useUsageResult(loadUsage, options, JSON.stringify(options))
+    ...(queryProvider === undefined ? {} : { provider: queryProvider }),
+    ...(dates ?? {}),
+  }), [queryProvider, timeZone, dates])
+  const load = useCallback<UsageTabInjected['loadUsage']>(async (query, signal) => (
+    customInvalid ? { ok: false, code: 'INVALID_REQUEST', message: '' } : loadUsage(query, signal)
+  ), [loadUsage, customInvalid])
+  const { result, loading, refresh } = useUsageResult(load, options, JSON.stringify(options))
+  // Bounded ranges compare against the immediately preceding period of equal length.
+  const previousOptions = useMemo<UsageLoadOptions | undefined>(() => {
+    if (!hasRange(dates)) return undefined
+    const length = Math.round((Date.parse(`${dates.to}T12:00:00Z`) - Date.parse(`${dates.from}T12:00:00Z`)) / 86_400_000) + 1
+    return { ...options, from: shiftDate(dates.from, -length), to: shiftDate(dates.to, -length) }
+  }, [dates, options])
 
   const knownProviders = useRef<string[]>([])
   if (result?.ok === true && queryProvider === undefined) knownProviders.current = result.summary.byProvider.map(item => item.provider)
@@ -308,18 +441,39 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
           <Dropdown label={t('billing.range')} value={range} onChange={setRange} options={[
             { value: 'today', label: t('billing.todayRange') }, { value: '7d', label: t('billing.sevenDays') },
             { value: '30d', label: t('billing.thirtyDays') }, { value: 'all', label: t('billing.allTime') },
+            { value: 'custom', label: t('billing.customRange') },
+          ]} />
+          {range === 'custom' ? <span className="dsh-billing-dates">
+            <input type="date" aria-label={t('billing.fromDate')} value={custom.from} max={custom.to || undefined}
+              onChange={event => { setCustom(prev => ({ ...prev, from: event.target.value })) }} />
+            <input type="date" aria-label={t('billing.toDate')} value={custom.to} min={custom.from || undefined}
+              onChange={event => { setCustom(prev => ({ ...prev, to: event.target.value })) }} />
+          </span> : null}
+          <Dropdown label={t('billing.timeZone')} value={timeZoneChoice} onChange={setTimeZoneChoice} options={[
+            { value: 'browser', label: `${t('billing.timeZoneBrowser')} · ${browserTimeZone}` },
+            ...COMMON_TIME_ZONES.map(zone => ({ value: zone, label: zone })),
           ]} />
           <button className="dsh-balance-refresh" type="button" disabled={loading} onClick={refresh}>
             {loading ? t('action.loading') : t('billing.refresh')}
           </button>
         </div>
       </div>
-      {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('billing.loading')}</p> : null}
-      {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
-      {result?.ok === true && result.scope === 'all' && (result.coverage?.skippedSessions ?? 0) > 0
-        ? <p className="dsh-balance-status dsh-billing-coverage" role="status">{t('billing.skippedSessions', { count: result.coverage!.skippedSessions })}</p>
-        : null}
-      {result?.ok === true && result.scope === 'all' ? <><SummaryCards summary={result.summary} t={t} /><Punchcard summary={result.summary} t={t} /><UsageTables summary={result.summary} t={t} /><p className="dsh-balance-meta">{t('billing.estimate')}</p><p className="dsh-balance-meta">{t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}</p></> : null}
+      {customInvalid ? <p className="dsh-balance-error" role="alert">{t('billing.invalidRange')}</p> : null}
+      {customInvalid ? null : <>
+        {loading && result === undefined ? <p className="dsh-balance-status" role="status">{t('billing.loading')}</p> : null}
+        {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
+        {result?.ok === true && result.scope === 'all' && (result.coverage?.skippedSessions ?? 0) > 0
+          ? <p className="dsh-balance-status dsh-billing-coverage" role="status">{t('billing.skippedSessions', { count: result.coverage!.skippedSessions })}</p>
+          : null}
+        {result?.ok === true && result.scope === 'all' ? <>
+          <SummaryCards summary={result.summary} t={t} comparison={previousOptions === undefined ? undefined
+            : <PeriodComparison load={load} previousOptions={previousOptions} current={result} t={t} />} />
+          <Punchcard summary={result.summary} t={t} />
+          <UsageTables summary={result.summary} t={t} />
+          <p className="dsh-balance-meta">{t('billing.estimate')}</p>
+          <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(result.fetchedAt).toLocaleString(t('locale.tag')) })}{result.source === 'cache' ? t('meta.cached') : ''}</p>
+        </> : null}
+      </>}
     </section>
   )
 }

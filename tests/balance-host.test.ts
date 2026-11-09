@@ -83,6 +83,36 @@ describe('provider balance route', () => {
     expect(resolve).not.toHaveBeenCalled()
   })
 
+  it('tracks in-process balance history and flags configured low balances', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ...deepseek, balance_infos: [{ currency: 'CNY', total_balance: '110', granted_balance: '10', topped_up_balance: '100' }] }))
+      .mockResolvedValueOnce(Response.json({ ...deepseek, balance_infos: [{ currency: 'CNY', total_balance: '50', granted_balance: '10', topped_up_balance: '100' }] }))
+    vi.stubGlobal('fetch', fetchImpl)
+    // Threshold currencies compare case-insensitively against the provider response.
+    const { request } = setup({ lowBalance: [{ currency: 'cny', amount: 100 }] })
+    expect((await request()).body.history).toBeUndefined()
+    vi.advanceTimersByTime(30_001)
+    const second = (await request()).body
+    expect(second.history).toHaveLength(2)
+    expect(second.history[1].balances).toEqual([{ currency: 'CNY', totalBalance: '50' }])
+    expect(second.lowBalance).toEqual([{ currency: 'CNY', totalBalance: '50', amount: 100 }])
+    // Cached responses keep the trend and the warning without re-querying.
+    const cached = (await request()).body
+    expect(cached.source).toBe('cache')
+    expect(cached.history).toHaveLength(2)
+    expect(cached.lowBalance).toHaveLength(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('omits history and low-balance warnings without configuration or observations', async () => {
+    vi.stubGlobal('fetch', async () => Response.json(deepseek))
+    const { request } = setup()
+    const body = (await request()).body
+    expect(body.history).toBeUndefined()
+    expect(body.lowBalance).toBeUndefined()
+  })
+
   it('validates overrides before registering routes', () => {
     expect(() => setup({ providers: [{ id: 'stepfun', baseUrl: 'http://example.com/v1' }] })).toThrow('HTTPS')
     expect(() => setup({ providers: [{ id: 'StepFun' }, { id: 'STEPFUN' }] })).toThrow('duplicate')

@@ -1,4 +1,5 @@
 import type { BalanceErrorCode, BalanceInfo, BalancePayload } from './types.ts'
+import { fetchWithRetry } from './fetch-with-retry.ts'
 import { findBalanceProvider } from './providers.ts'
 import type { BalanceProviderId } from './providers.ts'
 
@@ -99,6 +100,8 @@ export interface QueryBalanceOptions {
   baseUrl: string
   timeoutMs: number
   fetchImpl?: typeof fetch
+  /** Injected retry sleep; defaults to real timers. */
+  sleep?: (ms: number) => Promise<void>
 }
 
 /** Query the official endpoint with Bearer authentication and strict response validation. */
@@ -112,7 +115,8 @@ export async function queryProviderBalance(providerId: string, options: QueryBal
   const fetchImpl = options.fetchImpl ?? fetch
   let response: Response
   try {
-    response = await fetchImpl(new URL(adapter.path, baseUrl), {
+    // Each attempt rebuilds its options, so every retry carries a fresh timeout.
+    response = await fetchWithRetry(() => fetchImpl(new URL(adapter.path, baseUrl), {
       method: 'GET',
       redirect: 'error',
       headers: {
@@ -120,7 +124,7 @@ export async function queryProviderBalance(providerId: string, options: QueryBal
         authorization: `Bearer ${options.apiKey}`,
       },
       signal: AbortSignal.timeout(options.timeoutMs),
-    })
+    }), { sleep: options.sleep })
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
       throw new BalanceQueryError('UPSTREAM_TIMEOUT', `查询 ${provider.name} 余额超时`, 504, { cause: error })

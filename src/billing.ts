@@ -331,6 +331,20 @@ export function resolveBillingPrice(provider: string, model: string, time: numbe
   }
 }
 
+/** The latest effective price for one provider/model pair, for display only. */
+export function findBillingPrice(provider: string, model: string): BillingPrice | undefined {
+  const providerId = findBalanceProvider(provider)?.id ?? provider
+  // Mirror resolveBillingPrice: the API names deepseek-chat/reasoner now bill
+  // on the current V4 schedule, so the display must not quote legacy rates.
+  const canonicalModel = providerId === 'deepseek' && (model === 'deepseek-chat' || model === 'deepseek-reasoner')
+    ? 'deepseek-v4-flash'
+    : model
+  return BILLING_PRICES
+    .filter(price => price.provider === providerId && price.model === canonicalModel)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+    .at(-1)
+}
+
 /** Compute one request charge in the price's native currency. Cache writes are cache misses. */
 export function calculateRequestCost(usage: BillingUsage, price: BillingPrice, time: number): number {
   const multiplier = findBalanceProvider(price.provider)?.id === 'deepseek' && isPeakHour(new Date(time)) ? 2 : 1
