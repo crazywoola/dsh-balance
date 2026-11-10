@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { AdviceCard } from './AdviceCard.tsx'
+import type { AdviceLoadOptions } from './AdviceCard.tsx'
+import type { AdviceApiResponse } from '../advice.ts'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
@@ -18,6 +21,7 @@ export interface BalanceDockInjected {
     load: () => Promise<unknown>
   }
   loadBalance: (forceRefresh: boolean, signal: AbortSignal, provider: BalanceProviderId) => Promise<BalanceApiResponse>
+  loadAdvice?: (options: AdviceLoadOptions, signal: AbortSignal) => Promise<AdviceApiResponse>
 }
 
 export type BalanceDockProps = PropsRuntime<'conversation.composer.dock'>
@@ -25,7 +29,7 @@ export type BalanceDockProps = PropsRuntime<'conversation.composer.dock'>
   & PropsLocale<typeof LOCALE_NS>
 
 /** Compact ambient balance readout below the active-session composer card. */
-export function BalanceDock({ selection, loadBalance, t, sessionId }: BalanceDockProps) {
+export function BalanceDock({ selection, loadBalance, loadAdvice, t, sessionId }: BalanceDockProps) {
   const snapshot = useSyncExternalStore(selection.store.subscribe, selection.store.getSnapshot)
   useEffect(() => {
     if (selection.store.getSnapshot().status === 'idle') void selection.load().catch(() => {})
@@ -33,18 +37,22 @@ export function BalanceDock({ selection, loadBalance, t, sessionId }: BalanceDoc
   const current = snapshot.current
   const provider = current === null ? undefined : findBalanceProvider(current.provider)
   return <ProviderBalanceDock key={`${sessionId}:${current?.provider ?? ''}`} provider={provider?.id}
-    providerName={provider?.name ?? current?.provider} model={current?.model} loadBalance={loadBalance} t={t} />
+    providerName={provider?.name ?? current?.provider} model={current?.model} loadBalance={loadBalance}
+    loadAdvice={loadAdvice} sessionId={sessionId} t={t} />
 }
 
-function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: {
+function ProviderBalanceDock({ provider, providerName, model, loadBalance, loadAdvice, sessionId, t }: {
   provider: BalanceProviderId | undefined
   providerName: string | undefined
   model: string | undefined
   loadBalance: BalanceDockInjected['loadBalance']
+  loadAdvice: BalanceDockInjected['loadAdvice']
+  sessionId: BalanceDockProps['sessionId']
   t: BalanceDockProps['t']
 }) {
   const [result, setResult] = useState<BalanceApiResponse>()
   const [now, setNow] = useState(() => new Date())
+  const [adviceOpen, setAdviceOpen] = useState(false)
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -148,18 +156,27 @@ function ProviderBalanceDock({ provider, providerName, model, loadBalance, t }: 
     : undefined
 
   return (
-    <div
-      className="dsh-balance-dock"
-      role="status"
-      aria-live="polite"
-      title={periodTitle}
-      aria-label={`${label}${model === undefined ? '' : ` / ${model}`}: ${summary}${accessibleState === undefined ? '' : `. ${accessibleState}`}${periodLabel === undefined ? '' : `. ${periodLabel}`}${lowBalance ? `. ${t('dock.lowBalance')}` : ''}`}
-    >
-      <span className="dsh-balance-dock-dot" data-state={state} data-peak={isPeak ? 'true' : undefined} data-low={lowBalance ? 'true' : undefined} aria-hidden="true" />
-      <span>{label}</span>
-      {model === undefined ? null : <code className="dsh-balance-dock-model" title={model}>{model}</code>}
-      <span className="dsh-balance-dock-separator" aria-hidden="true">|</span>
-      <span className="dsh-balance-dock-value">{summary}</span>
+    <div className="dsh-balance-dock-shell">
+      <div
+        className="dsh-balance-dock"
+        role="status"
+        aria-live="polite"
+        title={periodTitle}
+        aria-label={`${label}${model === undefined ? '' : ` / ${model}`}: ${summary}${accessibleState === undefined ? '' : `. ${accessibleState}`}${periodLabel === undefined ? '' : `. ${periodLabel}`}${lowBalance ? `. ${t('dock.lowBalance')}` : ''}`}
+      >
+        <span className="dsh-balance-dock-dot" data-state={state} data-peak={isPeak ? 'true' : undefined} data-low={lowBalance ? 'true' : undefined} aria-hidden="true" />
+        <span>{label}</span>
+        {model === undefined ? null : <code className="dsh-balance-dock-model" title={model}>{model}</code>}
+        <span className="dsh-balance-dock-separator" aria-hidden="true">|</span>
+        <span className="dsh-balance-dock-value">{summary}</span>
+      </div>
+      {loadAdvice === undefined ? null : <>
+        <button type="button" className="dsh-balance-dock-advice-toggle" aria-expanded={adviceOpen}
+          onClick={() => { setAdviceOpen(open => !open) }}>
+          {t(adviceOpen ? 'advice.dockCollapse' : 'advice.dockToggle')}
+        </button>
+        {adviceOpen ? <AdviceCard compact sessionId={String(sessionId)} {...(provider === undefined ? {} : { provider })} {...(model === undefined ? {} : { model })} loadAdvice={loadAdvice} t={t} /> : null}
+      </>}
     </div>
   )
 }

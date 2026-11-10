@@ -15,6 +15,8 @@ import {
   normalizeUsdToCny,
   USAGE_ROUTE,
 } from './billing.ts'
+import { ADVICE_ROUTE, buildAdvice } from './advice.ts'
+import type { AdviceApiResponse, AdviceSuccess } from './advice.ts'
 import { UsageReader } from './usage-reader.ts'
 import { ModelQueryError, queryProviderModels } from './models.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from './types.ts'
@@ -106,7 +108,7 @@ function isLoopbackRequest(req: IncomingMessage): boolean {
   }
 }
 
-function sendJson(res: ServerResponse, status: number, body: BalanceApiResponse | ModelsApiResponse | UsageApiResponse): void {
+function sendJson(res: ServerResponse, status: number, body: BalanceApiResponse | ModelsApiResponse | UsageApiResponse | AdviceApiResponse): void {
   res.writeHead(status, {
     'cache-control': 'no-store',
     'content-type': 'application/json; charset=utf-8',
@@ -159,6 +161,36 @@ function parseUsageQuery(requestUrl: URL): UsageQuery | UsageFailure {
     ...(to === undefined ? {} : { to }),
     refresh: requestUrl.searchParams.get('refresh') === '1',
     ...(rawProvider === null ? {} : { provider: rawProvider.trim() }),
+  }
+}
+
+
+function parseAdviceQuery(requestUrl: URL): { sessionId: string; current?: { provider: string; model: string }; compare: { provider: string; model: string }[]; refresh: boolean } | UsageFailure {
+  const sessionId = (requestUrl.searchParams.get('session') ?? requestUrl.searchParams.get('sessionId') ?? '').trim()
+  if (sessionId.length === 0) return usageFailure('INVALID_REQUEST', 'advice 需要 session 或 sessionId')
+
+  const provider = requestUrl.searchParams.get('provider')?.trim()
+  const model = requestUrl.searchParams.get('model')?.trim()
+  if ((provider !== undefined && provider.length === 0) || (model !== undefined && model.length === 0)) {
+    return usageFailure('INVALID_REQUEST', 'provider 与 model 不能为空')
+  }
+  const current = provider !== undefined && model !== undefined ? { provider, model } : undefined
+
+  const compare: { provider: string; model: string }[] = []
+  for (const raw of requestUrl.searchParams.getAll('compare')) {
+    const separator = raw.indexOf(':')
+    if (separator <= 0 || separator === raw.length - 1) return usageFailure('INVALID_REQUEST', 'compare 需要 provider:model')
+    const compareProvider = raw.slice(0, separator).trim()
+    const compareModel = raw.slice(separator + 1).trim()
+    if (compareProvider.length === 0 || compareModel.length === 0) return usageFailure('INVALID_REQUEST', 'compare 需要 provider:model')
+    compare.push({ provider: compareProvider, model: compareModel })
+  }
+
+  return {
+    sessionId,
+    ...(current === undefined ? {} : { current }),
+    compare,
+    refresh: requestUrl.searchParams.get('refresh') === '1',
   }
 }
 
@@ -472,6 +504,66 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
+  const listConfiguredProviders = async (): Promise<string[]> => {
+    const ids: string[] = []
+    for (const provider of BALANCE_PROVIDERS) {
+      const settings = providerConfigs.get(provider.id)
+      if (settings === undefined) continue
+      try {
+        const credential = await ctx.credentials.resolve(credentialRef(settings.apiKeyRef))
+        if (credential !== undefined) ids.push(provider.id)
+      } catch {
+        // A missing or unreadable credential just means this provider is not configured.
+      }
+    }
+    return ids
+  }
+
+  const adviceHandler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (req.method !== 'GET') {
+      res.setHeader('allow', 'GET')
+      sendJson(res, 405, usageFailure('METHOD_NOT_ALLOWED', '仅支持 GET 请求'))
+      return
+    }
+    if (!config.allowRemote && !isLoopbackRequest(req)) {
+      sendJson(res, 403, usageFailure('FORBIDDEN', '下轮估算仅允许从本机访问'))
+      return
+    }
+
+    const requestUrl = new URL(req.url ?? ADVICE_ROUTE, 'http://localhost')
+    const parsedQuery = parseAdviceQuery(requestUrl)
+    if ('code' in parsedQuery) {
+      sendJson(res, 400, parsedQuery)
+      return
+    }
+
+    try {
+      const allSnapshots = await ctx.sessionPersistence.list()
+      usageReader.prune(allSnapshots)
+      const snapshot = allSnapshots.find(item => String(item.header.id) === parsedQuery.sessionId)
+      if (snapshot === undefined) {
+        sendJson(res, 404, usageFailure('SESSION_NOT_FOUND', '找不到指定会话'))
+        return
+      }
+      const source = await usageReader.read(snapshot, parsedQuery.refresh, pricingOverrides)
+      const usdToCny = normalizeUsdToCny(config.usdToCny)
+      const value: AdviceSuccess = buildAdvice({
+        sessionId: parsedQuery.sessionId,
+        records: source.records,
+        ...(parsedQuery.current === undefined ? {} : { current: parsedQuery.current }),
+        ...(parsedQuery.compare.length > 0 ? { compare: parsedQuery.compare } : {}),
+        configuredProviders: await listConfiguredProviders(),
+        pricingOverrides,
+        ...(usdToCny === undefined ? {} : { usdToCny }),
+        at: new Date(),
+      })
+      sendJson(res, 200, value)
+    } catch (error) {
+      ctx.logger.warn(error)
+      sendJson(res, 503, usageFailure('UPSTREAM_UNAVAILABLE', '读取会话消费记录失败，请稍后重试'))
+    }
+  }
+
   ctx.effect(
     () => ctx.webServer.register({ kind: 'exact', path: BALANCE_ROUTE, handler }),
     `dsh-balance: ${BALANCE_ROUTE}`,
@@ -483,6 +575,10 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(
     () => ctx.webServer.register({ kind: 'exact', path: USAGE_ROUTE, handler: usageHandler }),
     `dsh-balance: ${USAGE_ROUTE}`,
+  )
+  ctx.effect(
+    () => ctx.webServer.register({ kind: 'exact', path: ADVICE_ROUTE, handler: adviceHandler }),
+    `dsh-balance: ${ADVICE_ROUTE}`,
   )
 }
 
@@ -504,6 +600,7 @@ export {
   resolveBillingPrice,
   USAGE_ROUTE,
 } from './billing.ts'
+export { ADVICE_ROUTE, ADVICE_SAMPLE_LIMIT, buildAdvice, freshSessionUsage, medianTokenShape, medianTokens, recentPricedRequests } from './advice.ts'
 export type {
   ApiErrorCode,
   BalanceHistoryPoint,
@@ -518,6 +615,13 @@ export type {
   ModelsFailure,
   ModelsSuccess,
 } from './types.ts'
+export type {
+  AdviceApiResponse,
+  AdviceCaveat,
+  AdviceCoverage,
+  AdviceEstimate,
+  AdviceSuccess,
+} from './advice.ts'
 export type {
   BillingPrice,
   BillingUnknownReason,

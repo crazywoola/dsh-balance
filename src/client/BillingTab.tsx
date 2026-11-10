@@ -17,6 +17,9 @@ import { displayAmount, displayTokens } from './format.ts'
 import type { UsageCategory } from './export.ts'
 import { downloadTextFile, overviewCsv, overviewJson, sessionCsv, sessionJson } from './export.ts'
 import type { DshBalanceLocaleKey, LOCALE_NS } from './locales.ts'
+import { AdviceCard } from './AdviceCard.tsx'
+import type { AdviceLoadOptions } from './AdviceCard.tsx'
+import type { AdviceApiResponse } from '../advice.ts'
 
 export interface UsageLoadOptions {
   provider?: string
@@ -30,6 +33,7 @@ export interface UsageLoadOptions {
 
 export interface UsageTabInjected {
   loadUsage: (options: UsageLoadOptions, signal: AbortSignal) => Promise<UsageApiResponse>
+  loadAdvice?: (options: AdviceLoadOptions, signal: AbortSignal) => Promise<AdviceApiResponse>
 }
 
 export type BillingOverviewProps = UsageTabInjected & PropsLocale<typeof LOCALE_NS> & { provider?: string }
@@ -466,7 +470,7 @@ function useUsageResult(loadUsage: UsageTabInjected['loadUsage'], options: Usage
   return { result: state?.options === options ? state.result : undefined, loading, refresh: () => { void load(true) } }
 }
 
-export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps) {
+export function BillingOverview({ loadUsage, loadAdvice, t, provider }: BillingOverviewProps) {
   const [providerScope, setProviderScope] = useState<'selected' | 'all'>('selected')
   const selectedProvider = providerScope === 'all' ? undefined : provider
   const browserTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
@@ -598,6 +602,7 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
         </> : null}
         {sessionResult !== undefined ? <>
           <SummaryCards summary={sessionResult.summary} t={t} usdToCny={effectiveRate} showProjection={false} />
+          {loadAdvice === undefined ? null : <AdviceCard sessionId={sessionResult.session.sessionId} loadAdvice={loadAdvice} t={t} usdToCny={effectiveRate} />}
           <p className="dsh-balance-meta">{t('billing.estimate')}</p>
           <SessionDetails key={sessionResult.session.sessionId} result={sessionResult} t={t} usdToCny={effectiveRate} />
           <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(sessionResult.fetchedAt).toLocaleString(t('locale.tag')) })}{sessionResult.source === 'cache' ? t('meta.cached') : ''}</p>
@@ -607,7 +612,7 @@ export function BillingOverview({ loadUsage, t, provider }: BillingOverviewProps
   )
 }
 
-export function BillingView({ loadUsage, sessionId, useSession, useProjection, t }: BillingViewProps) {
+export function BillingView({ loadUsage, loadAdvice, sessionId, useSession, useProjection, t }: BillingViewProps) {
   const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', [])
   const [localRate] = useState(readStoredRate)
   const running = useSession(snapshot => snapshot.running)
@@ -633,6 +638,7 @@ export function BillingView({ loadUsage, sessionId, useSession, useProjection, t
       {result !== undefined ? <ErrorMessage result={result} t={t} /> : null}
       {sessionResult !== undefined ? <>
         <SummaryCards summary={sessionResult.summary} t={t} usdToCny={effectiveRate} showProjection={false} />
+        {loadAdvice === undefined ? null : <AdviceCard sessionId={sessionId} loadAdvice={loadAdvice} t={t} usdToCny={effectiveRate} />}
         <p className="dsh-balance-meta">{t('billing.estimate')}</p>
         <SessionDetails key={sessionId} result={sessionResult} t={t} usdToCny={effectiveRate} />
         <p className="dsh-balance-meta">{t('meta.updated', { time: new Date(sessionResult.fetchedAt).toLocaleString(t('locale.tag')) })}{sessionResult.source === 'cache' ? t('meta.cached') : ''}</p>
