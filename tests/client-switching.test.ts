@@ -14,6 +14,7 @@ import { ModelsSection } from '../src/client/ModelsTab.tsx'
 import type { ModelsTabInjected } from '../src/client/ModelsTab.tsx'
 import type { BalanceApiResponse } from '../src/types.ts'
 import type { UsageApiResponse, UsageSummary, UsageTotals } from '../src/billing.ts'
+import type { AdviceApiResponse, AdviceSuccess } from '../src/advice.ts'
 import { en } from '../src/client/locales.ts'
 
 const t: BalanceDockProps['t'] = (key, values) => Object.entries(values ?? {}).reduce(
@@ -528,4 +529,68 @@ it('prefers Host-provided model prices over the bundled catalog', async () => {
   const json = JSON.stringify(root.toJSON())
   expect(json).toContain('Input $0.01 · Output $0.02 per million tokens')
   expect(json).not.toContain('$0.22')
+})
+
+
+function adviceSuccess(): AdviceSuccess {
+  return {
+    ok: true,
+    estimateOnly: true,
+    sessionId: 'a',
+    fetchedAt: new Date().toISOString(),
+    currentPeriod: 'off-peak',
+    nextChangeAt: '2026-09-10T06:00:00.000Z',
+    sampleSize: 1,
+    sampleLimit: 8,
+    tokenShape: { inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0 },
+    current: { provider: 'deepseek', model: 'deepseek-flash' },
+    now: { kind: 'now', provider: 'deepseek', model: 'deepseek-flash', at: '2026-09-10T04:00:00.000Z', period: 'off-peak', pricingVersion: 'deepseek-flash-2026-09-10', costUsd: 0.753, combinedCny: null },
+    afterChange: { kind: 'after-change', provider: 'deepseek', model: 'deepseek-flash', at: '2026-09-10T06:00:00.000Z', period: 'peak', pricingVersion: 'deepseek-flash-2026-09-10', costUsd: 1.506, combinedCny: null },
+    fresh: { kind: 'fresh', provider: 'deepseek', model: 'deepseek-flash', at: '2026-09-10T04:00:00.000Z', period: 'off-peak', pricingVersion: 'deepseek-flash-2026-09-10', costUsd: 0.9, combinedCny: null },
+    alternatives: [{ kind: 'alternative', provider: 'deepseek', model: 'deepseek-v4-pro', at: '2026-09-10T04:00:00.000Z', period: 'off-peak', pricingVersion: 'deepseek-v4-2026-08-17', costUsd: 2.662, combinedCny: null }],
+    cacheSavings: { costUsd: 0.147, combinedCny: null },
+    coverage: { requests: 1, pricedRequests: 1, freeRequests: 0, unpricedRequests: 0, status: 'priced', catalog: [{ provider: 'deepseek', pricingVersion: 'deepseek-flash-2026-09-10' }] },
+    caveats: ['estimate-not-a-bill', 'shape-may-differ'],
+  }
+}
+
+it('keeps the composer next-turn estimate collapsed until opened and does not stretch the dock', async () => {
+  const loadBalance = vi.fn<BalanceDockInjected['loadBalance']>().mockResolvedValue(balance('12'))
+  const loadAdvice = vi.fn<(options: { sessionId: string }, signal: AbortSignal) => Promise<AdviceApiResponse>>().mockResolvedValue(adviceSuccess())
+  let root!: ReactTestRenderer
+  await act(async () => {
+    root = create(createElement(BalanceDock, { ...dockProps(directory(), loadBalance), loadAdvice }))
+    roots.push(root)
+  })
+  expect(loadAdvice).not.toHaveBeenCalled()
+  expect(JSON.stringify(root.toJSON())).toContain('Next-turn estimate')
+  expect(JSON.stringify(root.toJSON())).not.toContain('Fresh session')
+  expect(root.root.findByProps({ className: 'dsh-balance-dock-shell' }).props.className).toBe('dsh-balance-dock-shell')
+  await act(async () => { root.root.findByProps({ className: 'dsh-balance-dock-advice-toggle' }).props.onClick() })
+  expect(loadAdvice).toHaveBeenCalledOnce()
+  expect(loadAdvice.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'a', provider: 'deepseek', model: 'deepseek-v4-flash' })
+  expect(JSON.stringify(root.toJSON())).toContain('Fresh session (all cache-miss)')
+  expect(JSON.stringify(root.toJSON())).toContain('Estimate, not a bill')
+  expect(JSON.stringify(root.toJSON())).not.toContain('SECRET_PROMPT')
+})
+
+it('shows the next-turn card on the session Usage tab without prompt text', async () => {
+  const base = usage(10)
+  if (!base.ok || base.scope !== 'all') throw new Error('invalid fixture')
+  const loadUsage = vi.fn<UsageTabInjected['loadUsage']>().mockResolvedValue({
+    ok: true, scope: 'session', fetchedAt: new Date().toISOString(), source: 'live',
+    summary: base.summary, session: { ...base.summary.totals, sessionId: 'a', title: 'a' },
+    requests: [{ sessionId: 'a', seq: 1, turn: 1, step: 0, time: new Date().toISOString(), provider: 'deepseek', model: 'deepseek-flash', inputTokens: 10, outputTokens: 20, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.01, billingStatus: 'priced' as const }],
+  })
+  const loadAdvice = vi.fn<(options: { sessionId: string }, signal: AbortSignal) => Promise<AdviceApiResponse>>().mockResolvedValue(adviceSuccess())
+  const props = { sessionId: 'a', t, loadUsage, loadAdvice, useSession: () => false, useProjection: () => ({}) } as BillingViewProps
+  let root!: ReactTestRenderer
+  await act(async () => { root = create(createElement(BillingView, props)); roots.push(root) })
+  expect(loadAdvice).toHaveBeenCalledOnce()
+  expect(loadAdvice.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'a' })
+  const json = JSON.stringify(root.toJSON())
+  expect(json).toContain('Next-turn estimate')
+  expect(json).toContain('published-rate estimates, not an official bill')
+  expect(json).toContain('deepseek-v4-pro')
+  expect(json).not.toContain('SECRET_PROMPT')
 })

@@ -23,6 +23,7 @@ The composer readout follows the current session’s provider and model. The Set
 - Cache query results with manual refresh support
 - Annotate the model list with catalogued reference rates (input/output per million tokens); models without published pricing are marked explicitly
 - Drill from the Sessions category into any session's full request breakdown and back to the overview
+- Estimate the next turn from this session’s recent priced token mix: the current period, after the next peak change, a fresh session (all cache-miss), and other official models already configured in this Harness that can actually be priced, plus how much cache saves by continuing versus starting over. These are estimates, not an official bill; the plugin never auto-switches models and never sends session text off the machine
 - Export the current view as JSON or CSV (overview: full summary or the visible category; session: request-level records) — data never leaves the machine
 - Enter a display-only USD→CNY rate on the usage page (kept in browser localStorage, no restart); the plugin's `usdToCny` config still takes precedence
 - Replace built-in prices with `pricingOverrides` (matched by provider + model, optional `effectiveFrom`); the model list and usage estimates follow
@@ -147,10 +148,20 @@ Built-in estimates use [official DeepSeek USD rates](https://api-docs.deepseek.c
 
 [StepFun mainland CNY reference rates](https://platform.stepfun.com/docs/zh/guides/pricing/details) were re-checked on 2026-11-10 for `step-5-preview`, `step-3.7-flash`, `step-3.5-flash`, `step-3.5-flash-2603`, and `step-1o-turbo-vision`. The standard `step-5-preview` cache-hit price changed from 0.35 to 0.70 CNY per million tokens at 2026-10-14 00:30 Beijing time. Accounts that had already used the pay-as-you-go API before that time may keep 0.35; the plugin cannot detect that grandfathering, so it applies the standard effective-from date. Requests without supported pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
 
+
+## Next-turn estimates
+
+The session Usage tab shows a next-turn estimate card. The composer balance dock can expand the same estimate on demand; it stays collapsed by default so it does not clutter the row. The token shape is the per-bucket median of the session’s most recent priced requests (uncached input, cache read, cache write, output), priced through the existing billing engines rather than a second pricing path. The next turn may not match, for example after compaction, a large paste, or vision input.
+
+The response includes the current period, the next peak-change time, the sample size, the token shape, estimates for the current model now, after the change, and as a fresh session, plus other configured official models that can be priced. Unpriced models are omitted rather than shown as $0. Native USD and CNY are shown separately; a combined CNY total appears only when `usdToCny` is set. The Host route is `GET /dsh-balance/api/advice?session=…`, loopback-only, and the payload never includes prompt or session text.
+
+These figures are published-rate estimates, not an official bill. When the post-2026-10-14 standard StepFun `step-5-preview` cache-hit rate is used, the UI notes that some accounts may still be grandfathered at 0.35 CNY per million tokens; the plugin cannot detect that. Tokener estimates use the 2026-11-03 catalog snapshot, without vendor rates or the DeepSeek peak multiplier.
+
 ## Extension and design
 
 - `src/providers.ts` holds shared provider metadata. The adapter table in `src/balance.ts` defines endpoints and response parsers; transport, errors, and caching are shared.
 - `GET /dsh-balance/api/balance?provider=StepFun` selects StepFun. Omitting provider preserves DeepSeek compatibility; `refresh=1` bypasses that provider's cache. Unknown providers return `UNSUPPORTED_PROVIDER`.
+- `GET /dsh-balance/api/advice?session=…` returns the next-turn estimate for a session (`sessionId` is also accepted), with optional `provider`, `model`, and repeated `compare=provider:model`. The response never includes prompt text.
 - The layout draws on [Codrops' Kononenko case study](https://tympanus.net/codrops/2026/09/18/kononenko-architectural-bureau/): oversized type, negative space, architectural grids, and geometric linework, implemented in original CSS with light/dark themes, narrow layouts, and reduced-motion support.
 
 ## Development

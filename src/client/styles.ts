@@ -230,16 +230,24 @@ export const balanceStyles = `
 .dsh-billing-rate input[data-invalid='true'] { border-color: var(--dsw-alias-state-error-primary, #c33); }
 .dsh-billing-rate input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; }
 .dsh-model-price[data-known='false'] { font-style: italic; opacity: .75; }
-.dsh-balance-dock {
+.dsh-balance-dock-shell {
   box-sizing: border-box;
   display: block;
   /* Content-sized: this entry shares conversation.composer.dock with the
      shipped stats pills and the context meter, so claiming the full row width
-     squeezed them until they ellipsized. */
+     squeezed them until they ellipsized. The optional next-turn expansion
+     stays in this shell and must not stretch the dock. */
   width: auto;
   max-width: var(--dsh-chat-content-width);
   margin: 0 auto;
   padding: 4px calc(var(--dsh-composer-side-clearance, 0px) + 16px) 0;
+  text-align: center;
+}
+.dsh-balance-dock {
+  box-sizing: border-box;
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 20px;
@@ -247,7 +255,35 @@ export const balanceStyles = `
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
+.dsh-balance-dock-advice-toggle {
+  display: inline-block;
+  margin-left: 10px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  vertical-align: middle;
+}
+.dsh-balance-dock-advice-toggle:hover { color: var(--dsw-alias-label-secondary); }
+.dsh-balance-dock-advice-toggle:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #4d6bfe); outline-offset: 2px; border-radius: 4px; }
+.dsh-advice-dock { margin-top: 4px; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 18px; white-space: normal; }
+.dsh-advice-note { color: var(--dsw-alias-label-dimmed, var(--dsw-alias-label-tertiary)); font-size: 10px; }
+.dsh-advice-card { min-width: 0; border: .5px solid var(--ledger-line); border-radius: var(--dsw-radius-lg, 12px); padding: 20px; background: var(--ledger-paper); display: flex; flex-direction: column; gap: 10px; }
+.dsh-advice-card-head .dsh-balance-heading { font-size: 16px; }
+.dsh-advice-meta { margin: 0; color: var(--ledger-muted); font-size: 12px; line-height: 1.6; }
+.dsh-advice-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; }
+.dsh-advice-row strong { font-variant-numeric: tabular-nums; }
+.dsh-advice-row small { flex-basis: 100%; color: var(--ledger-muted); font-size: 11px; }
+.dsh-advice-alternatives { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ledger-line); }
+.dsh-advice-caveats { margin: 0; padding-left: 18px; color: var(--ledger-muted); font-size: 11px; line-height: 1.6; }
 .dsh-balance-dock-model { display: inline-block; max-width: 40%; margin-left: 8px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .dsh-balance-dock-dot {
   display: inline-block;
@@ -274,7 +310,7 @@ export const balanceStyles = `
 }
 @media (max-width: 640px) {
   .dsh-billing-view { padding: 20px 16px calc(var(--dsh-composer-height, 152px) + 20px); }
-  .dsh-balance-dock { white-space: normal; }
+  .dsh-balance-dock, .dsh-balance-dock-shell { white-space: normal; }
   .dsh-balance-dock-model, .dsh-balance-dock-value { max-width: 100%; }
   .dsh-balance-summary { align-items: flex-start; }
   .dsh-balance-grid,

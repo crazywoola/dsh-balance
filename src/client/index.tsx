@@ -13,6 +13,9 @@ import type { BalanceProviderId } from '../providers.ts'
 import { BALANCE_ROUTE, MODELS_ROUTE } from '../types.ts'
 import { USAGE_ROUTE } from '../billing.ts'
 import type { UsageApiResponse } from '../billing.ts'
+import { ADVICE_ROUTE } from '../advice.ts'
+import type { AdviceApiResponse } from '../advice.ts'
+import type { AdviceLoadOptions } from './AdviceCard.tsx'
 import { BalanceDock } from './BalanceDock.tsx'
 import type { BalanceDockInjected } from './BalanceDock.tsx'
 import { DeepSeekPanel } from './DeepSeekPanel.tsx'
@@ -28,6 +31,7 @@ export type { BalanceDockInjected, BalanceDockProps } from './BalanceDock.tsx'
 export type { DeepSeekPanelInjected, DeepSeekPanelProps } from './DeepSeekPanel.tsx'
 export type { ModelsTabInjected, ModelsTabProps } from './ModelsTab.tsx'
 export type { UsageLoadOptions, UsageTabInjected, BillingOverviewProps, BillingViewProps } from './BillingTab.tsx'
+export type { AdviceCardProps, AdviceLoadOptions } from './AdviceCard.tsx'
 
 export const inject = ['slots', 'locale', 'modelDirectories']
 
@@ -88,6 +92,24 @@ async function loadUsage(options: UsageLoadOptions, signal: AbortSignal): Promis
   return value as UsageApiResponse
 }
 
+
+async function loadAdvice(options: AdviceLoadOptions, signal: AbortSignal): Promise<AdviceApiResponse> {
+  const params = new URLSearchParams({ session: options.sessionId })
+  if (options.provider !== undefined) params.set('provider', options.provider)
+  if (options.model !== undefined) params.set('model', options.model)
+  const response = await fetch(`${ADVICE_ROUTE}?${params.toString()}`, {
+    method: 'GET',
+    headers: { accept: 'application/json' },
+    cache: 'no-store',
+    signal,
+  })
+  const value: unknown = await response.json()
+  if (typeof value !== 'object' || value === null || !('ok' in value) || typeof value.ok !== 'boolean') {
+    throw new Error('下轮估算插件收到了无法识别的 Host 响应')
+  }
+  return value as AdviceApiResponse
+}
+
 /** Register native navigation, settings, and conversation surfaces. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(
@@ -109,7 +131,7 @@ export function apply(ctx: ClientContext): void {
     name: 'main',
     key: 'dsh-usage',
     locale: LOCALE_NS,
-    inject: (): UsageTabInjected => ({ loadUsage }),
+    inject: (): UsageTabInjected => ({ loadUsage, loadAdvice }),
   }, UsagePage))
 
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
@@ -135,7 +157,7 @@ export function apply(ctx: ClientContext): void {
     order: 30,
     label: () => t('billing.tab'),
     locale: LOCALE_NS,
-    inject: (): UsageTabInjected => ({ loadUsage }),
+    inject: (): UsageTabInjected => ({ loadUsage, loadAdvice }),
   }, BillingView))
 
   ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
@@ -143,6 +165,6 @@ export function apply(ctx: ClientContext): void {
     id: 'deepseek-balance',
     order: 10,
     locale: LOCALE_NS,
-    inject: (sessionId): BalanceDockInjected => ({ loadBalance, selection: ctx.modelDirectories.directoryFor(sessionId) }),
+    inject: (sessionId): BalanceDockInjected => ({ loadBalance, loadAdvice, selection: ctx.modelDirectories.directoryFor(sessionId) }),
   }, BalanceDock))
 }
