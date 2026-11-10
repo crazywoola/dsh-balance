@@ -27,6 +27,14 @@ describe('isPeakHour', () => {
     expect(isPeakHour(at('2026-08-16T10:00:00+08:00'))).toBe(false)
     expect(isPeakHour(at('2026-08-17T10:00:00+08:00'))).toBe(true)
   })
+
+  it('stays off-peak on weekends and Chinese public holidays', () => {
+    expect(isPeakHour(at('2026-08-22T10:00:00+08:00'))).toBe(false)
+    expect(isPeakHour(at('2026-08-23T15:00:00+08:00'))).toBe(false)
+    expect(isPeakHour(at('2026-09-25T10:00:00+08:00'))).toBe(false)
+    expect(isPeakHour(at('2026-10-01T10:00:00+08:00'))).toBe(false)
+    expect(isPeakHour(at('2026-10-08T10:00:00+08:00'))).toBe(true)
+  })
 })
 
 describe('nextPeriodChange', () => {
@@ -44,6 +52,14 @@ describe('nextPeriodChange', () => {
   it('wraps to 09:00 Beijing time the next day after 18:00', () => {
     expect(nextPeriodChange(at('2026-08-17T18:00:00+08:00'))).toEqual(at('2026-08-18T09:00:00+08:00'))
     expect(nextPeriodChange(at('2026-08-17T23:59:59+08:00'))).toEqual(at('2026-08-18T09:00:00+08:00'))
+    expect(nextPeriodChange(at('2026-08-17T00:30:00+08:00'))).toEqual(at('2026-08-17T09:00:00+08:00'))
+  })
+
+  it('skips weekends and Chinese public holidays when finding the next peak start', () => {
+    expect(nextPeriodChange(at('2026-08-21T18:00:00+08:00'))).toEqual(at('2026-08-24T09:00:00+08:00'))
+    expect(nextPeriodChange(at('2026-08-22T10:00:00+08:00'))).toEqual(at('2026-08-24T09:00:00+08:00'))
+    expect(nextPeriodChange(at('2026-09-24T18:00:00+08:00'))).toEqual(at('2026-09-28T09:00:00+08:00'))
+    expect(nextPeriodChange(at('2026-10-01T10:00:00+08:00'))).toEqual(at('2026-10-08T09:00:00+08:00'))
   })
 
   it('is timezone independent', () => {

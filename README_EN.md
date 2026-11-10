@@ -18,7 +18,7 @@ The composer readout follows the current session’s provider and model. The Set
 - Fetch available models, owners, and creation dates from the selected provider’s `/models` API
 - View actual usage costs by selected provider, model, session, and day in Settings, plus request details in the current session's Usage tab
 - Mark missing usage, unknown providers, and unknown models as unpriced without estimating tokens
-- Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time
+- Group dates in the browser's IANA timezone while applying DeepSeek peak pricing in Beijing time, Monday–Friday only, with Chinese public holidays all-day off-peak
 - Show native USD and CNY costs separately; `usdToCny` enables a combined CNY total
 - Cache query results with manual refresh support
 - Annotate the model list with catalogued reference rates (input/output per million tokens); models without published pricing are marked explicitly
@@ -29,7 +29,7 @@ The composer readout follows the current session’s provider and model. The Set
 - Show a recent balance trend (the last 48 in-process observations) in Settings and optional per-currency low-balance warnings (`lowBalance`), mirrored below the composer
 - Custom date ranges and twelve common time zones (browser default); month-to-date projection at the current pace, plus a comparison with the immediately preceding period for bounded ranges
 - Retry balance and model queries on 429 / 5xx (honoring `Retry-After`, exponential backoff, at most three attempts)
-- Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00, 14:00–18:00 Beijing time)
+- Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00 and 14:00–18:00 Beijing time, Monday–Friday, excluding Chinese public holidays)
 - Native Simplified Chinese and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness
 
@@ -99,7 +99,7 @@ pricingOverrides:
 
 Overrides apply to both the model-list annotations and usage estimates; models without an override keep their built-in rates. Besides `usdToCny`, the usage page also accepts a display-only rate stored in this browser; the plugin configuration wins when present.
 
-Both the official provider ID `deepseek-official` and legacy `deepseek` are supported case-insensitively and share DeepSeek credentials, balance caches, and model caches. The composer retains the actual model ID, such as `deepseek-flash`; new models with unknown pricing remain unpriced.
+Both the official provider ID `deepseek-official` and legacy `deepseek` are supported case-insensitively and share DeepSeek credentials, balance caches, and model caches. The composer retains the actual model ID; use `deepseek-flash` (legacy names `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`, as well as `deepseek-chat` / `deepseek-reasoner`, are billed at the current official Flash rates). New models with unknown pricing remain unpriced.
 
 ## Tokener configuration and usage
 
@@ -143,7 +143,9 @@ Model lists use the [StepFun list API](https://platform.stepfun.com/docs/zh/api-
 
 Each request is attributed to its actual message source, with request headers as a fallback for older logs. Request time determines date grouping and peak pricing. Token totals include uncached input, output, cache reads, and cache writes. Settings defaults to the selected provider, with an All providers option; the session view keeps mixed-provider history.
 
-Built-in estimates cover official DeepSeek USD rates and verified StepFun mainland CNY reference rates. Requests without supported pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
+Built-in estimates use [official DeepSeek USD rates](https://api-docs.deepseek.com/quick_start/pricing/): current Flash off-peak prices are $0.003 / $0.15 / $0.60 per million tokens (cache hit / miss / output), and peak is 2x. Peak hours are 09:00–12:00 and 14:00–18:00 Beijing time (UTC 01:00–04:00 and 06:00–10:00), Monday–Friday only; weekends and Chinese public holidays are all-day off-peak. Holiday dates follow the 2026 arrangements in [State Council General Office notice 国办发明电〔2025〕7号](https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm). Current Flash prices take effect from 2026-09-10 04:00 UTC; earlier usage keeps the 2026-08-17 historical tier (the current official page no longer lists those figures, so they cannot be re-verified).
+
+[StepFun mainland CNY reference rates](https://platform.stepfun.com/docs/zh/guides/pricing/details) were re-checked on 2026-11-10 for `step-5-preview`, `step-3.7-flash`, `step-3.5-flash`, `step-3.5-flash-2603`, and `step-1o-turbo-vision`. The standard `step-5-preview` cache-hit price changed from 0.35 to 0.70 CNY per million tokens at 2026-10-14 00:30 Beijing time. Accounts that had already used the pay-as-you-go API before that time may keep 0.35; the plugin cannot detect that grandfathering, so it applies the standard effective-from date. Requests without supported pricing keep their token and request counts and show as unpriced. A similarly named DeepSeek model does not inherit official DeepSeek pricing on another provider. Entirely unpriced totals do not show $0; mixed totals include only known charges and carry a partial-cost label. Live account balances are separate from local usage estimates.
 
 ## Extension and design
 
@@ -181,4 +183,4 @@ The activity punchcard groups requests by weekday and hour in the selected brows
 
 The conversation usage view has centered content, responsive padding and space for the composer. Cache input is counted once; duplicate settlements replace the previous sample, retries remain separate, and fork prefixes are excluded.
 
-StepFun mainland API estimates use [official standard CNY rates](https://platform.stepfun.com/docs/zh/guides/pricing/details), verified on 2026-09-30, for `step-5-preview`, `step-3.7-flash`, `step-3.5-flash` and `step-3.5-flash-2603`. These reference estimates do not account for plans, discounts or unrecorded historical rate changes. USD and native CNY are shown separately; only an explicitly configured `usdToCny` rate enables a combined CNY total. Unknown rates remain unpriced. `?page=session` previews the conversation view with 124 StepFun requests.
+StepFun mainland API estimates use [official standard CNY rates](https://platform.stepfun.com/docs/zh/guides/pricing/details), re-checked on 2026-11-10, for `step-5-preview`, `step-3.7-flash`, `step-3.5-flash`, `step-3.5-flash-2603`, and `step-1o-turbo-vision`. The standard `step-5-preview` cache-hit rate is 0.70 CNY per million from 2026-10-14 00:30 Beijing time; earlier records use 0.35. These reference estimates do not account for plans, discounts, grandfathered account rates, or unrecorded historical rate changes. USD and native CNY are shown separately; only an explicitly configured `usdToCny` rate enables a combined CNY total. Unknown rates remain unpriced. `?page=session` previews the conversation view with 124 StepFun requests.

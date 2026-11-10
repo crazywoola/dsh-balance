@@ -18,7 +18,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 De
 - 从当前提供方的 `/models` 接口读取可用模型、所属组织与创建时间
 - 在设置页按所选 provider、模型、会话和日期查看实际 usage 消费，并在当前会话的“消费”Tab 查看请求明细
 - 明确区分已计费、免费（已知价格且费用为 0）与未计费请求；缺少 provider usage、未知 provider 或未知模型时不进行费用估算
-- 日期按浏览器 IANA 时区分组；DeepSeek 峰谷价格始终按北京时间计算
+- 日期按浏览器 IANA 时区分组；DeepSeek 峰谷价格始终按北京时间计算，仅周一至周五适用，中国法定节假日全天低谷
 - DeepSeek 费用显示 USD、StepFun 显示原生 CNY；配置 `usdToCny` 后显示人民币合计
 - 缓存查询结果并支持手动刷新
 - 模型列表标注内置参考价（输入 / 输出每百万 tokens），未收录价格的模型明确标记
@@ -29,7 +29,7 @@ DeepSeek Harness 插件，用于查询 DeepSeek / StepFun API 余额，以及 De
 - 设置页展示近期余额走势（进程内最近 48 次查询），并可按币种配置低额预警（`lowBalance`），聊天框下方同步提示
 - 统计页支持自定义日期范围与 12 个常用时区（默认跟随浏览器），月度按当前节奏预测，限定范围时与上一同期对比
 - 余额与模型查询对 429 / 5xx 自动重试（尊重 `Retry-After`，指数退避，最多 3 次尝试）
-- 依据 DeepSeek 峰谷定价，在高峰时段（北京时间 9:00–12:00、14:00–18:00）将聊天框下方的余额指示灯变为橙色
+- 依据 DeepSeek 峰谷定价，在高峰时段（北京时间周一至周五 9:00–12:00、14:00–18:00，中国法定节假日除外）将聊天框下方的余额指示灯变为橙色
 - 原生支持简体中文和英文，并跟随 Harness 系统语言切换
 - 支持 Harness 已保存的 `DEEPSEEK_API_KEY`
 
@@ -103,7 +103,7 @@ pricingOverrides:
 
 自定义价格同时作用于设置页模型列表标注与消费统计估算；未覆盖的模型仍按内置价格计算。汇率除配置 `usdToCny` 外，也可在统计页直接填写（仅保存在本浏览器，插件配置优先生效）。
 
-官方提供方 ID `deepseek-official` 与旧 ID `deepseek` 均受支持（大小写不敏感），共享 DeepSeek 凭据、余额及模型缓存。底部保留实际模型 ID，例如 `deepseek-flash`；价格未知的新模型仍标为“未计费”。
+官方提供方 ID `deepseek-official` 与旧 ID `deepseek` 均受支持（大小写不敏感），共享 DeepSeek 凭据、余额及模型缓存。底部保留实际模型 ID；请使用 `deepseek-flash`（遗留名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 以及 `deepseek-chat` / `deepseek-reasoner` 同样按现行 Flash 官方价计费）。价格未知的新模型仍标为“未计费”。
 
 ## StepFun 配置
 
@@ -145,7 +145,9 @@ providers:
 
 每条请求按实际返回消息的 provider / model 归属，兼容旧日志的请求头；日期和峰谷价格按该次请求时间计算。Token 总量包括未缓存输入、输出、缓存读取与缓存写入。设置页默认筛选所选 provider，也可选择“全部提供方”；会话页保留混用模型的完整历史。
 
-内置 DeepSeek 美元定价，以及 2026-09-30 核验的 [StepFun 官方人民币标准价](https://platform.stepfun.com/docs/zh/guides/pricing/details)：`step-5-preview`、`step-3.7-flash`、`step-3.5-flash` 和 `step-3.5-flash-2603`。StepFun 未缓存输入（含缓存写入）、缓存读取、输出分别计价，不套用 DeepSeek 峰谷倍率。费用是公开标准价估算，不代表账户实际账单；套餐、折扣和未保存的历史调价不包含在内。
+内置 [DeepSeek 官方美元定价](https://api-docs.deepseek.com/quick_start/pricing/)：现行 Flash 低谷价为每百万 tokens 缓存命中 $0.003 / 未命中 $0.15 / 输出 $0.60，高峰为 2 倍；高峰为北京时间周一至周五 09:00–12:00、14:00–18:00（UTC 01:00–04:00、06:00–10:00），周末及中国法定节假日全天低谷。法定节假日按 [国办发明电〔2025〕7号](https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm) 的 2026 年放假日期。现行 Flash 价自 2026-09-10 04:00 UTC 起生效，此前仍使用 2026-08-17 历史档（当前官网已不再列出该档数字，无法复核）。
+
+[StepFun 官方人民币标准价](https://platform.stepfun.com/docs/zh/guides/pricing/details) 于 2026-11-10 复核：`step-5-preview`、`step-3.7-flash`、`step-3.5-flash`、`step-3.5-flash-2603` 和 `step-1o-turbo-vision`。`step-5-preview` 缓存命中标准价自北京时间 2026-10-14 00:30 起由 0.35 元／百万调整为 0.70 元／百万；该时间之前已通过按量付费 API 调用过该模型的账户可能仍适用 0.35 元，插件无法识别账户是否享受此保留价，因此一律按标准生效时间计价。StepFun 未缓存输入（含缓存写入）、缓存读取、输出分别计价，不套用 DeepSeek 峰谷倍率。费用是公开标准价估算，不代表账户实际账单；套餐、折扣和未保存的历史调价不包含在内。
 
 美元和原生人民币费用分别展示；设置 `usdToCny` 后，人民币合计才会包含美元折算金额，并明确标为固定汇率换算。未设置汇率时，原生人民币金额不会被表述为包含美元费用的完整人民币合计。已知价格且费用为 0 的请求单列为“免费”；未知 provider / model 和缺失 usage 的请求保留请求数与 token，显示“未计费”。账户余额是实时查询值，与本地用量估算独立；赠送余额与充值余额分别展示，StepFun 的总充值/总赠送为累计值而非剩余余额。会话消费页采用居中内容宽度、响应式外边距，并为底部输入框保留空间。
 
