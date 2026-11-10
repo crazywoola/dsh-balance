@@ -1,10 +1,17 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { findBalanceProvider } from './providers.ts'
-import { isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
+import { FLASH_CURRENT_EFFECTIVE_FROM, isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
 import { TOKENER_PRICES, TOKENER_PRICING_VERSION } from './tokener-pricing.ts'
 
 export const USAGE_ROUTE = '/dsh-balance/api/usage'
-export const BILLING_PRICING_VERSION = 'deepseek-v4-2026-08-17'
+/** Current official DeepSeek Flash schedule, effective 2026-09-10 04:00 UTC. */
+export const BILLING_PRICING_VERSION = 'deepseek-flash-2026-09-10'
+const DEEPSEEK_V4_PRICING_VERSION = 'deepseek-v4-2026-08-17'
+const STEPFUN_PRICING_VERSION_2026_09_30 = 'stepfun-reference-2026-09-30'
+/** Catalog re-verified against official StepFun pricing on 2026-11-10. */
+const STEPFUN_PRICING_VERSION = 'stepfun-reference-2026-11-10'
+/** Standard step-5-preview cache-hit price change, 2026-10-14 00:30 Beijing time. */
+const STEPFUN_STEP5_STANDARD_HIT_FROM = Date.parse('2026-10-14T00:30:00+08:00')
 const TOKENS_PER_MILLION = 1_000_000
 
 interface BillingPriceIdentity {
@@ -27,25 +34,50 @@ interface PriceRates {
   outputUsdPerMillion: number
 }
 
-const CURRENT_PRICES: Record<string, PriceRates> = {
-  'deepseek-v4-flash': { cacheHitUsdPerMillion: 0.007, cacheMissUsdPerMillion: 0.22, outputUsdPerMillion: 0.66 },
-  'deepseek-v4-pro': { cacheHitUsdPerMillion: 0.022, cacheMissUsdPerMillion: 0.66, outputUsdPerMillion: 1.98 },
-}
+const FLASH_MODEL_IDS = ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'] as const
+
+/** Historical V4 Flash rates from 2026-08-17; current official site no longer lists these figures. */
+const V4_FLASH_RATES: PriceRates = { cacheHitUsdPerMillion: 0.007, cacheMissUsdPerMillion: 0.22, outputUsdPerMillion: 0.66 }
+/** Current official Flash off-peak rates, verified 2026-11-10. Peak is 2x. */
+const CURRENT_FLASH_RATES: PriceRates = { cacheHitUsdPerMillion: 0.003, cacheMissUsdPerMillion: 0.15, outputUsdPerMillion: 0.60 }
+const V4_PRO_RATES: PriceRates = { cacheHitUsdPerMillion: 0.022, cacheMissUsdPerMillion: 0.66, outputUsdPerMillion: 1.98 }
 
 const LEGACY_PRICES: Record<string, PriceRates> = {
   'deepseek-chat': { cacheHitUsdPerMillion: 0.07, cacheMissUsdPerMillion: 0.27, outputUsdPerMillion: 1.10 },
   'deepseek-reasoner': { cacheHitUsdPerMillion: 0.14, cacheMissUsdPerMillion: 0.55, outputUsdPerMillion: 2.19 },
 }
 
-/** Standard mainland API rates, verified against StepFun's official pricing on 2026-09-30.
- * These are reference estimates; account discounts and historical price changes are not known.
+type StepFunRates = { cacheHitCnyPerMillion: number; cacheMissCnyPerMillion: number; outputCnyPerMillion: number }
+
+/** Standard mainland API rates first verified on 2026-09-30.
+ * Unchanged flash models were re-checked against official pricing on 2026-11-10.
+ * These are reference estimates; account discounts and grandfathered rates are not known.
  */
-const STEPFUN_PRICES: Record<string, { cacheHitCnyPerMillion: number; cacheMissCnyPerMillion: number; outputCnyPerMillion: number }> = {
+const STEPFUN_PRICES: Record<string, StepFunRates> = {
   'step-5-preview': { cacheHitCnyPerMillion: 0.35, cacheMissCnyPerMillion: 7, outputCnyPerMillion: 20 },
   'step-3.7-flash': { cacheHitCnyPerMillion: 0.27, cacheMissCnyPerMillion: 1.35, outputCnyPerMillion: 8.1 },
   'step-3.5-flash': { cacheHitCnyPerMillion: 0.14, cacheMissCnyPerMillion: 0.7, outputCnyPerMillion: 2.1 },
   'step-3.5-flash-2603': { cacheHitCnyPerMillion: 0.14, cacheMissCnyPerMillion: 0.7, outputCnyPerMillion: 2.1 },
 }
+
+const STEPFUN_CURRENT_PRICES: readonly (StepFunRates & { model: string; effectiveFrom: number; pricingVersion: string })[] = [
+  {
+    model: 'step-5-preview',
+    effectiveFrom: STEPFUN_STEP5_STANDARD_HIT_FROM,
+    pricingVersion: STEPFUN_PRICING_VERSION,
+    cacheHitCnyPerMillion: 0.70,
+    cacheMissCnyPerMillion: 7,
+    outputCnyPerMillion: 20,
+  },
+  {
+    model: 'step-1o-turbo-vision',
+    effectiveFrom: 0,
+    pricingVersion: STEPFUN_PRICING_VERSION,
+    cacheHitCnyPerMillion: 0.5,
+    cacheMissCnyPerMillion: 2.5,
+    outputCnyPerMillion: 8,
+  },
+]
 
 export const BILLING_PRICES: readonly BillingPrice[] = [
   ...Object.entries(LEGACY_PRICES).map(([model, rates]) => ({
@@ -55,16 +87,34 @@ export const BILLING_PRICES: readonly BillingPrice[] = [
     pricingVersion: 'deepseek-legacy',
     ...rates,
   })),
-  ...Object.entries(CURRENT_PRICES).map(([model, rates]) => ({
+  ...FLASH_MODEL_IDS.map(model => ({
     provider: 'deepseek',
     model,
     effectiveFrom: new Date(PEAK_EFFECTIVE_FROM).toISOString(),
-    pricingVersion: BILLING_PRICING_VERSION,
-    ...rates,
+    pricingVersion: DEEPSEEK_V4_PRICING_VERSION,
+    ...V4_FLASH_RATES,
   })),
+  ...FLASH_MODEL_IDS.map(model => ({
+    provider: 'deepseek',
+    model,
+    effectiveFrom: new Date(FLASH_CURRENT_EFFECTIVE_FROM).toISOString(),
+    pricingVersion: BILLING_PRICING_VERSION,
+    ...CURRENT_FLASH_RATES,
+  })),
+  {
+    provider: 'deepseek',
+    model: 'deepseek-v4-pro',
+    effectiveFrom: new Date(PEAK_EFFECTIVE_FROM).toISOString(),
+    pricingVersion: DEEPSEEK_V4_PRICING_VERSION,
+    ...V4_PRO_RATES,
+  },
   ...Object.entries(STEPFUN_PRICES).map(([model, rates]) => ({
     provider: 'stepfun', model, currency: 'CNY' as const,
-    effectiveFrom: new Date(0).toISOString(), pricingVersion: 'stepfun-reference-2026-09-30', ...rates,
+    effectiveFrom: new Date(0).toISOString(), pricingVersion: STEPFUN_PRICING_VERSION_2026_09_30, ...rates,
+  })),
+  ...STEPFUN_CURRENT_PRICES.map(({ model, effectiveFrom, pricingVersion, ...rates }) => ({
+    provider: 'stepfun', model, currency: 'CNY' as const,
+    effectiveFrom: new Date(effectiveFrom).toISOString(), pricingVersion, ...rates,
   })),
   ...Object.entries(TOKENER_PRICES).map(([model, [input, cacheRead, output]]) => ({
     provider: 'tokener', model,
@@ -378,38 +428,36 @@ function messageMetadata(event: SessionEvent): { provider: string; model: string
     : undefined
 }
 
+function selectEffectivePrice(providerId: string, model: string, time: number, catalog: readonly BillingPrice[]): BillingPrice | undefined {
+  return catalog
+    .filter(price => price.provider === providerId && price.model === model && Date.parse(price.effectiveFrom) <= time)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+}
+
+/** Map DeepSeek aliases onto the catalog model that was official at `time`. */
+function catalogDeepSeekModel(model: string, time: number): string {
+  if (model !== 'deepseek-chat' && model !== 'deepseek-reasoner') return model
+  if (time < PEAK_EFFECTIVE_FROM) return model
+  return time >= FLASH_CURRENT_EFFECTIVE_FROM ? 'deepseek-flash' : 'deepseek-v4-flash'
+}
+
 /** Resolve the versioned price for one request; configured overrides win. */
 export function resolveBillingPrice(provider: string, model: string, time: number, overrides: readonly BillingPrice[] = []): BillingPrice | undefined {
   const providerId = findBalanceProvider(provider)?.id
-  const override = overrides
-    .filter(price => price.provider === providerId && price.model === model && Date.parse(price.effectiveFrom) <= time)
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+  if (providerId === undefined) return undefined
+  const override = selectEffectivePrice(providerId, model, time, overrides)
   if (override !== undefined) return override
-  if (providerId === 'stepfun' || providerId === 'tokener') return BILLING_PRICES.find(price => price.provider === providerId && price.model === model)
-  if (providerId !== 'deepseek') return undefined
-  const canonicalModel = model === 'deepseek-chat' || model === 'deepseek-reasoner'
-    ? (time >= PEAK_EFFECTIVE_FROM ? 'deepseek-v4-flash' : model)
-    : model
-  const rates = time < PEAK_EFFECTIVE_FROM && canonicalModel === model
-    ? LEGACY_PRICES[canonicalModel]
-    : CURRENT_PRICES[canonicalModel]
-  if (rates === undefined) return undefined
-  return {
-    provider: 'deepseek',
-    model: canonicalModel,
-    effectiveFrom: new Date(time < PEAK_EFFECTIVE_FROM ? 0 : PEAK_EFFECTIVE_FROM).toISOString(),
-    pricingVersion: time < PEAK_EFFECTIVE_FROM ? 'deepseek-legacy' : BILLING_PRICING_VERSION,
-    ...rates,
-  }
+  const catalogModel = providerId === 'deepseek' ? catalogDeepSeekModel(model, time) : model
+  return selectEffectivePrice(providerId, catalogModel, time, BILLING_PRICES)
 }
 
 /** The latest effective price for one provider/model pair, for display only. */
 export function findBillingPrice(provider: string, model: string): BillingPrice | undefined {
   const providerId = findBalanceProvider(provider)?.id ?? provider
   // Mirror resolveBillingPrice: the API names deepseek-chat/reasoner now bill
-  // on the current V4 schedule, so the display must not quote legacy rates.
+  // on the current Flash schedule, so the display must not quote legacy rates.
   const canonicalModel = providerId === 'deepseek' && (model === 'deepseek-chat' || model === 'deepseek-reasoner')
-    ? 'deepseek-v4-flash'
+    ? 'deepseek-flash'
     : model
   return BILLING_PRICES
     .filter(price => price.provider === providerId && price.model === canonicalModel)

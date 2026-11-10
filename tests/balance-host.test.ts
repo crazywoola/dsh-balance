@@ -116,7 +116,7 @@ describe('provider balance route', () => {
   it('returns effective per-model prices with configured overrides applied', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ object: 'list', data: [{ id: 'deepseek-v4-flash', object: 'model', owned_by: 'deepseek' }] }))
     const builtIn = (await setup({}, '/dsh-balance/api/models').request()).body
-    expect(builtIn.prices).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.22 }))
+    expect(builtIn.prices).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.15 }))
 
     const overridden = (await setup({ pricingOverrides: [{ provider: 'DeepSeek', model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.01, cacheHitUsdPerMillion: 0, outputUsdPerMillion: 0.02 }] }, '/dsh-balance/api/models').request()).body
     const flash = overridden.prices.find((price: { model: string }) => price.model === 'deepseek-v4-flash')

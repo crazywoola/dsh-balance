@@ -55,6 +55,42 @@ describe('billing price calculation', () => {
     expect(resolveBillingPrice('other', 'deepseek-v4-flash', time('2026-08-17T00:00:00Z'))).toBeUndefined()
     expect(resolveBillingPrice('deepseek', 'not-a-model', time('2026-08-17T00:00:00Z'))).toBeUndefined()
   })
+
+  it('applies current official Flash prices from 2026-09-10 04:00 UTC', () => {
+    const at = time('2026-09-10T04:00:00Z')
+    const price = resolveBillingPrice('deepseek', 'deepseek-flash', at)
+    expect(price).toMatchObject({
+      model: 'deepseek-flash',
+      pricingVersion: 'deepseek-flash-2026-09-10',
+      cacheHitUsdPerMillion: 0.003,
+      cacheMissUsdPerMillion: 0.15,
+      outputUsdPerMillion: 0.60,
+    })
+    const usage = { inputTokens: 1_000_000, cacheWriteTokens: 0, cacheReadTokens: 1_000_000, outputTokens: 1_000_000 }
+    // 04:00 UTC is 12:00 Beijing, the weekday lunch off-peak window.
+    expect(calculateRequestCost(usage, price!, at)).toBe(0.753)
+    expect(calculateRequestCost(usage, price!, time('2026-09-10T01:00:00Z'))).toBe(1.506)
+    expect(resolveBillingPrice('deepseek', 'deepseek-v4-flash', time('2026-09-10T03:59:59Z'))).toMatchObject({
+      pricingVersion: 'deepseek-v4-2026-08-17',
+      cacheMissUsdPerMillion: 0.22,
+    })
+    for (const model of ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-chat', 'deepseek-reasoner']) {
+      expect(resolveBillingPrice('deepseek', model, at)).toMatchObject({
+        cacheMissUsdPerMillion: 0.15,
+        pricingVersion: 'deepseek-flash-2026-09-10',
+      })
+    }
+  })
+
+  it('keeps DeepSeek weekend and Chinese public holiday hours off-peak', () => {
+    const historical = resolveBillingPrice('deepseek', 'deepseek-v4-flash', time('2026-08-17T00:00:00Z'))!
+    const current = resolveBillingPrice('deepseek', 'deepseek-flash', time('2026-10-01T01:00:00Z'))!
+    const usage = { inputTokens: 1_000_000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 1_000_000 }
+    // Saturday 09:00 Beijing would have been peak under the old weekday-agnostic rule.
+    expect(calculateRequestCost(usage, historical, time('2026-08-22T01:00:00Z'))).toBe(0.88)
+    // National Day 2026-10-01 is a Thursday holiday; current Flash off-peak rates apply.
+    expect(calculateRequestCost(usage, current, time('2026-10-01T01:00:00Z'))).toBe(0.75)
+  })
 })
 
 describe('extractSessionUsage', () => {
@@ -187,7 +223,7 @@ describe('provider and model switching', () => {
   })
 })
 
-it('groups official and legacy DeepSeek routes together without assigning an unverified model price', () => {
+it('groups official and legacy DeepSeek routes together and prices deepseek-flash as Flash', () => {
   const events = [requestHeader(0, '2026-08-17T00:00:00Z', 'deepseek'), stepStart(1), assistant(2, { inputTokens: 100, outputTokens: 5 }),
     stepStart(3, 2), requestHeader(4, '2026-08-17T00:00:05Z', 'deepseek-official'), assistant(5, { inputTokens: 7, outputTokens: 8 }, 2),
     stepStart(6, 3), requestHeader(7, '2026-08-17T00:00:10Z', 'DEEPSEEK-OFFICIAL', 'deepseek-flash'), assistant(8, { inputTokens: 3, outputTokens: 4 }, 3)]
@@ -196,8 +232,14 @@ it('groups official and legacy DeepSeek routes together without assigning an unv
   const official = aggregateBilling([source], { ...utcOptions, provider: 'deepseek-official' })
   expect(official.summary).toEqual(legacy.summary)
   expect(official.summary.byModel).toHaveLength(2)
-  expect(official.summary.totals).toMatchObject({ requests: 3, pricedRequests: 2, unpricedRequests: 1 })
-  expect(official.requestsBySession.get('a')?.[2]).toMatchObject({ provider: 'deepseek', model: 'deepseek-flash', costUsd: null, unknownReason: 'unknown-model' })
+  expect(official.summary.totals).toMatchObject({ requests: 3, pricedRequests: 3, unpricedRequests: 0 })
+  expect(official.requestsBySession.get('a')?.[2]).toMatchObject({
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    costUsd: 0.0000033,
+    billingStatus: 'priced',
+    pricingVersion: 'deepseek-v4-2026-08-17',
+  })
 })
 
 
@@ -273,6 +315,28 @@ describe('activity punchcard', () => {
 })
 
 describe('native StepFun CNY billing', () => {
+  it('uses the standard 0.70 cache-hit rate from 2026-10-14 00:30 Beijing time', () => {
+    const before = resolveBillingPrice('stepfun', 'step-5-preview', time('2026-10-13T16:29:59Z'))
+    expect(before).toMatchObject({ cacheHitCnyPerMillion: 0.35, pricingVersion: 'stepfun-reference-2026-09-30' })
+    const after = resolveBillingPrice('stepfun', 'step-5-preview', time('2026-10-13T16:30:00Z'))
+    expect(after).toMatchObject({ cacheHitCnyPerMillion: 0.70, pricingVersion: 'stepfun-reference-2026-11-10' })
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    expect(calculateRequestCost(usage, after!, time('2026-10-13T16:30:00Z'))).toBe(27.7)
+  })
+
+  it('prices step-1o-turbo-vision at official CNY rates', () => {
+    const price = resolveBillingPrice('stepfun', 'step-1o-turbo-vision', time('2026-11-10T00:00:00Z'))
+    expect(price).toMatchObject({
+      currency: 'CNY',
+      cacheMissCnyPerMillion: 2.5,
+      cacheHitCnyPerMillion: 0.5,
+      outputCnyPerMillion: 8,
+      pricingVersion: 'stepfun-reference-2026-11-10',
+    })
+    const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    expect(calculateRequestCost(usage, price!, time('2026-11-10T00:00:00Z'))).toBe(11)
+  })
+
   it('prices the screenshot tokens once at official rates and never applies DeepSeek peak multipliers', () => {
     const at = time('2026-09-29T02:22:19Z')
     const price = resolveBillingPrice('StepFun', 'step-5-preview', at)!
@@ -292,13 +356,13 @@ describe('native StepFun CNY billing', () => {
       { sessionId: 'cny', title: 'CNY', inheritedEventCount: 0, events: [requestHeader(0, at, 'STEPFUN', 'step-5-preview'), stepStart(1, 1, 0, at), assistant(2, { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000 })] },
     ]
     const { summary, requestsBySession } = aggregateBilling(sources, utcOptions)
-    expect(summary.totals).toMatchObject({ requests: 2, pricedRequests: 2, unpricedRequests: 0, cnyPricedRequests: 1, costUsd: 0.22, nativeCostCny: 27.35, costCny: 27.35 })
+    expect(summary.totals).toMatchObject({ requests: 2, pricedRequests: 2, unpricedRequests: 0, cnyPricedRequests: 1, costUsd: 0.15, nativeCostCny: 27.35, costCny: 27.35 })
     expect(requestsBySession.get('cny')?.[0]).toMatchObject({ costUsd: null, costCny: 27.35 })
     for (const rows of [summary.byProvider, summary.byModel, summary.bySession, summary.byDay, summary.byWeekdayHour]) {
       expect(rows.reduce((sum, row) => sum + row.nativeCostCny, 0)).toBe(27.35)
       expect(rows.reduce((sum, row) => sum + row.pricedRequests, 0)).toBe(2)
     }
-    expect(aggregateBilling(sources, { ...utcOptions, usdToCny: 7 }).summary.totals.costCny).toBe(28.89)
+    expect(aggregateBilling(sources, { ...utcOptions, usdToCny: 7 }).summary.totals.costCny).toBe(28.4)
     expect(aggregateBilling(sources, { ...utcOptions, provider: 'stepfun' }).summary.totals).toMatchObject({ costUsd: 0, costCny: 27.35, pricedRequests: 1 })
   })
 })
@@ -348,9 +412,13 @@ describe('Tokener usage', () => {
 describe('findBillingPrice', () => {
   it('returns the latest effective schedule for a known model', () => {
     // API model names on the legacy schedule display their current V4 rates.
-    expect(findBillingPrice('deepseek', 'deepseek-chat')).toMatchObject({ model: 'deepseek-v4-flash', pricingVersion: 'deepseek-v4-2026-08-17' })
-    expect(findBillingPrice('deepseek', 'deepseek-reasoner')).toMatchObject({ model: 'deepseek-v4-flash' })
-    expect(findBillingPrice('StepFun', 'step-5-preview')).toMatchObject({ provider: 'stepfun', currency: 'CNY', outputCnyPerMillion: 20 })
+    expect(findBillingPrice('deepseek', 'deepseek-chat')).toMatchObject({ model: 'deepseek-flash', pricingVersion: 'deepseek-flash-2026-09-10' })
+    expect(findBillingPrice('deepseek', 'deepseek-reasoner')).toMatchObject({ model: 'deepseek-flash' })
+    expect(findBillingPrice('deepseek', 'deepseek-flash')).toMatchObject({ cacheMissUsdPerMillion: 0.15, pricingVersion: 'deepseek-flash-2026-09-10' })
+    expect(findBillingPrice('deepseek', 'deepseek-v4-flash')).toMatchObject({ cacheMissUsdPerMillion: 0.15 })
+    expect(findBillingPrice('deepseek', 'deepseek-v4-flash-vision-exp')).toMatchObject({ cacheMissUsdPerMillion: 0.15 })
+    expect(findBillingPrice('StepFun', 'step-5-preview')).toMatchObject({ provider: 'stepfun', currency: 'CNY', cacheHitCnyPerMillion: 0.70, outputCnyPerMillion: 20 })
+    expect(findBillingPrice('StepFun', 'step-1o-turbo-vision')).toMatchObject({ cacheMissCnyPerMillion: 2.5, outputCnyPerMillion: 8 })
     expect(findBillingPrice('tokener.ai', 'claude-opus-5')).toMatchObject({ provider: 'tokener', outputUsdPerMillion: 25 })
   })
 
@@ -398,7 +466,13 @@ describe('pricing overrides', () => {
     // Built-in rows for other models survive, and each model appears once.
     expect(prices.filter(price => price.model === 'deepseek-v4-flash')).toHaveLength(1)
     expect(prices.map(price => price.model)).toContain('deepseek-v4-pro')
-    expect(effectivePrices('deepseek')).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.22 }))
+    expect(effectivePrices('deepseek')).toContainEqual(expect.objectContaining({ model: 'deepseek-v4-flash', cacheMissUsdPerMillion: 0.15 }))
+    expect(effectivePrices('deepseek').map(price => price.model)).toEqual(expect.arrayContaining([
+      'deepseek-flash',
+      'deepseek-v4-flash',
+      'deepseek-v4-flash-vision-exp',
+      'deepseek-v4-pro',
+    ]))
   })
 
   it('prices extracted requests with overrides and labels their version', () => {

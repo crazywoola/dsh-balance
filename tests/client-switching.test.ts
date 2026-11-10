@@ -396,7 +396,7 @@ it('annotates catalogued model prices and marks unknown ones', async () => {
   let root!: ReactTestRenderer
   await act(async () => { root = create(createElement(ModelsSection, { provider: 'deepseek', loadModels, t })); roots.push(root) })
   const json = JSON.stringify(root.toJSON())
-  expect(json).toContain('Input $0.22 · Output $0.66 per million tokens')
+  expect(json).toContain('Input $0.15 · Output $0.60 per million tokens')
   expect(json).toContain('Pricing not catalogued')
 })
 
