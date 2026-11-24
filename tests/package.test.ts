@@ -28,14 +28,14 @@ describe('published package metadata', () => {
     expect(dshPeers).not.toHaveLength(0)
     for (const [name, range] of dshPeers) {
       const version = packageJson.devDependencies?.[name] ?? ''
-      expect(range, name).toBe(packageJson.engines?.dsh)
       expect(valid(version), name).toBe(version)
-      expect(satisfies(version, range, dshSemverOptions), name).toBe(true)
+      expect(satisfies(version, range), name).toBe(true)
     }
   })
 
   it.each([
-    '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2',
+    '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.1',
+    '0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.5', '0.2.2',
     '0.2.3-rc.1', '0.2.3', '0.3.0-rc.1', '0.3.0', '0.9.0-rc.1', '0.99.0',
   ])('admits DSH %s without an exact-version exemption', (version) => {
     for (const [name, range] of dshRanges) {
@@ -44,7 +44,7 @@ describe('published package metadata', () => {
   })
 
   it.each([
-    '0.1.0', '0.2.1-rc.5', '0.2.1', '0.2.2-rc.0',
+    '0.1.0', '0.2.0', '0.2.1-rc.2',
     '1.0.0-alpha.1', '1.0.0-rc.1', '1.0.0', '2.0.0',
   ])('keeps DSH %s outside the supported range', (version) => {
     for (const [name, range] of dshRanges) {
@@ -52,12 +52,18 @@ describe('published package metadata', () => {
     }
   })
 
-  it('accepts later Cordis 4.x versions while retaining the 4.1 minimum', () => {
+  it.each(['0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.5'])('allows the host DSH %s peers under standard semver rules', (version) => {
+    for (const [name, range] of dshPeers) {
+      expect(satisfies(version, range), name).toBe(true)
+    }
+  })
+
+  it('accepts Cordis 4.x versions starting at 4.0.5', () => {
     const range = packageJson.peerDependencies?.['@deepseek-ai/cordis'] ?? ''
-    for (const version of ['4.1.0', '4.1.1', '4.2.0', '4.99.0']) {
+    for (const version of ['4.0.5', '4.1.0', '4.1.1', '4.2.0', '4.99.0']) {
       expect(satisfies(version, range), version).toBe(true)
     }
-    for (const version of ['4.0.5', '5.0.0']) {
+    for (const version of ['4.0.4', '5.0.0']) {
       expect(satisfies(version, range), version).toBe(false)
     }
   })
