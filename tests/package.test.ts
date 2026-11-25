@@ -52,7 +52,7 @@ describe('published package metadata', () => {
     }
   })
 
-  it.each(['0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.5'])('allows the host DSH %s peers under standard semver rules', (version) => {
+  it.each(['0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.5', '0.2.3-alpha.1', '0.2.3-alpha.2', '0.2.3-rc.1', '0.2.3'])('allows the host DSH %s peers under standard semver rules', (version) => {
     for (const [name, range] of dshPeers) {
       expect(satisfies(version, range), name).toBe(true)
     }

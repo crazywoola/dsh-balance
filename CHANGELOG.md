@@ -11,6 +11,11 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - `ROADMAP.md` with the ranked release backlog.
 
+## [0.14.2] - 2026-11-25
+
+### Fixed
+- [Stability] DSH peer ranges now admit `0.2.3-alpha.*`/`0.2.3-rc.*` prereleases under standard semver rules, so npm/pnpm no longer report unmet peers on DSH `0.2.3-alpha.2`. Added regression tests.
+
 ## [0.14.1] - 2026-11-25
 
 ### Fixed
@@ -47,7 +52,9 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - Tokener usage statistics; support DSH `0.2.1-rc.5`.
 
-[Unreleased]: https://github.com/crazywoola/dsh-balance/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/crazywoola/dsh-balance/compare/v0.14.2...HEAD
+[0.14.2]: https://github.com/crazywoola/dsh-balance/compare/v0.14.1...v0.14.2
+[0.14.1]: https://github.com/crazywoola/dsh-balance/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/crazywoola/dsh-balance/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/crazywoola/dsh-balance/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/crazywoola/dsh-balance/compare/v0.12.1...v0.13.0
