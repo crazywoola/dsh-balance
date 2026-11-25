@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPeakHour, nextPeriodChange } from '../src/client/pricing.ts'
+import { isBeyondHolidayCalendar, isPeakHour, nextPeriodChange } from '../src/client/pricing.ts'
 
 const at = (iso: string) => new Date(iso)
 
@@ -65,5 +65,21 @@ describe('nextPeriodChange', () => {
   it('is timezone independent', () => {
     // 15:30 Beijing == 07:30 UTC
     expect(nextPeriodChange(at('2026-08-17T07:30:00Z'))).toEqual(at('2026-08-17T10:00:00Z'))
+  })
+})
+
+describe('2027 holiday calendar', () => {
+  it('treats 2027 weekday rest days as off-peak', () => {
+    for (const d of ['2027-01-01', '2027-02-05', '2027-02-12', '2027-04-05', '2027-05-04', '2027-06-09', '2027-09-15', '2027-10-07']) {
+      expect(isPeakHour(at(`${d}T10:00:00+08:00`)), d).toBe(false)
+    }
+    expect(isPeakHour(at('2027-01-04T10:00:00+08:00'))).toBe(true)
+    expect(isPeakHour(at('2027-06-10T10:00:00+08:00'))).toBe(true)
+    expect(nextPeriodChange(at('2027-06-09T10:00:00+08:00')).toISOString()).toBe(at('2027-06-10T09:00:00+08:00').toISOString())
+  })
+
+  it('reports dates beyond the known calendar', () => {
+    expect(isBeyondHolidayCalendar(at('2027-12-31T23:59:59+08:00'))).toBe(false)
+    expect(isBeyondHolidayCalendar(at('2028-01-01T00:00:00+08:00'))).toBe(true)
   })
 })

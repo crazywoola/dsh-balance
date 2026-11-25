@@ -24,7 +24,7 @@ compaction engine or memory service, a Langfuse clone.
 
 | # | Release | Type | Item |
 |---|---------|------|------|
-| 1 | patch | fix | **2027 holiday calendar + calendar horizon.** Add the 2027 rest days from 国办发明电〔2026〕10号 (published 2026-11-05: 1/1–3, 2/5–13, 4/3–5, 5/1–5, 6/9, 9/15, 10/1–7). Without it, weekday holidays from 2027-01-01 are priced as peak. Warn (caveat + test) when a date is beyond the last known holiday year instead of silently assuming none. |
+| 1 | ~~patch~~ | ~~fix~~ | ~~2027 holiday calendar~~ — shipped in v0.14.1. |
 | 2 | patch | fix | **DSH 0.2.3 compatibility pass.** Verify install/start on `dsh-v0.2.3-alpha.2` (Node ≥ 24.22.3 / ≥ 26.13.1): peer ranges under standard semver also admit 0.2.3 prereleases; usage from forked/branch sessions (0.2.2-rc.2 SubAgent/AgentTeam, 0.2.3 branch sessions) is not double-counted with the parent; sessions in the official SQLite store are read. Add fixtures for each. |
 | 3 | patch | chore | **CI.** GitHub Actions workflow running `pnpm check` on PRs and `main` (Node 24.22.x and 26.x), plus a release-tag job that verifies `package.json` version matches the tag. |
 | 4 | minor | feat | **Four-way next-step advisor.** Extend the advisor to continue / wait for off-peak / `/compact` now / fresh session. `/compact` = summarizer request cost (DSH 0.2.3 uses the model that answered last) + post-compact cache shape (system prefix still hits, rewritten history misses). |
@@ -46,4 +46,5 @@ queue and ship as patch releases.
 
 ## Done
 
+- [x] v0.14.1 — [Bugfix] 2027 holiday calendar + calendar-horizon caveat.
 - [x] v0.14.0 — next-turn cost advisor (#10), DeepSeek/StepFun price refresh (#9), DSH 0.2.1-rc.3 compatibility (#11).
