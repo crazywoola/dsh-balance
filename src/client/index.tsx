@@ -23,6 +23,7 @@ import type { DeepSeekPanelInjected } from './DeepSeekPanel.tsx'
 import { BillingView } from './BillingTab.tsx'
 import type { UsageLoadOptions, UsageTabInjected } from './BillingTab.tsx'
 import { en, LOCALE_NS, zh } from './locales.ts'
+import { zhTW } from './locales-zh-tw.ts'
 import { balanceStyles } from './styles.ts'
 
 export type { UsagePageProps } from './UsagePage.tsx'
@@ -113,8 +114,12 @@ async function loadAdvice(options: AdviceLoadOptions, signal: AbortSignal): Prom
 /** Register native navigation, settings, and conversation surfaces. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(
-    () => ctx.locale.register(LOCALE_NS, { zh, en }),
+    () => ctx.locale.register(LOCALE_NS, { zh, en, 'zh-tw': zhTW }),
     'dsh-balance: dictionaries',
+  )
+  ctx.effect(
+    () => ctx.locale.addLanguage({ id: 'zh-tw', label: '繁體中文', fallback: 'zh' }),
+    'dsh-balance: zh-TW language',
   )
   const t = ctx.locale.bind(LOCALE_NS)
 

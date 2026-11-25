@@ -11,6 +11,11 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - `ROADMAP.md` with the ranked release backlog.
 
+## [0.14.3] - 2026-11-25
+
+### Added
+- [UX] Traditional Chinese (zh-TW) locale, registered as the `zh-tw` language (label 繁體中文) that falls back per key to `zh`, then `en`, following DSH locale fallbacks. A test checks it has no missing or extra keys versus zh/en and keeps `{placeholders}` intact.
+
 ## [0.14.2] - 2026-11-25
 
 ### Fixed

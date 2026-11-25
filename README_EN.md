@@ -31,7 +31,7 @@ The composer readout follows the current session’s provider and model. The Set
 - Custom date ranges and twelve common time zones (browser default); month-to-date projection at the current pace, plus a comparison with the immediately preceding period for bounded ranges
 - Retry balance and model queries on 429 / 5xx (honoring `Retry-After`, exponential backoff, at most three attempts)
 - Follows DeepSeek peak/off-peak pricing: the balance indicator below the composer turns orange during peak hours (09:00–12:00 and 14:00–18:00 Beijing time, Monday–Friday, excluding Chinese public holidays)
-- Native Simplified Chinese and English that follows the Harness system language
+- Native Simplified Chinese, Traditional Chinese (zh-TW, falling back to Simplified Chinese per key) and English that follows the Harness system language
 - Use the `DEEPSEEK_API_KEY` saved by Harness
 
 ## Compatibility

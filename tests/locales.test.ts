@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { en, errorLocaleKey, zh } from '../src/client/locales.ts'
+import { zhTW } from '../src/client/locales-zh-tw.ts'
 import type { DeepSeekApiErrorCode } from '../src/types.ts'
 
 describe('client locales', () => {
@@ -25,5 +26,22 @@ describe('client locales', () => {
     ]
 
     expect(codes.map(errorLocaleKey)).toEqual(codes.map(code => `error.${code}`))
+  })
+})
+
+describe('zh-TW locale', () => {
+  it('has no missing or extra keys versus zh and en, and no empty values', () => {
+    const keys = Object.keys(zh).sort()
+    expect(Object.keys(zhTW).sort()).toEqual(keys)
+    expect(Object.keys(zhTW).sort()).toEqual(Object.keys(en).sort())
+    expect(Object.values(zhTW).every(Boolean)).toBe(true)
+    expect(zhTW['locale.tag']).toBe('zh-TW')
+  })
+
+  it('preserves {placeholders} of the zh source in every key', () => {
+    const names = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort()
+    for (const key of Object.keys(zh) as (keyof typeof zh)[]) {
+      expect(names(zhTW[key]), key).toEqual(names(zh[key]))
+    }
   })
 })
