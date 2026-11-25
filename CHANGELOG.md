@@ -11,6 +11,11 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - `ROADMAP.md` with the ranked release backlog.
 
+## [0.14.1] - 2026-11-25
+
+### Fixed
+- [Bugfix] Added the 2027 Chinese public-holiday calendar (国办发明电〔2026〕10号), so weekday holidays from 2027-01-01 are off-peak instead of peak. The advisor now warns when a date is past the last known holiday year.
+
 ## [0.14.0] - 2026-11-24
 
 ### Added

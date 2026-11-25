@@ -33,7 +33,23 @@ const CHINESE_PUBLIC_HOLIDAYS = new Set([
   '2026-06-19', '2026-06-20', '2026-06-21',
   '2026-09-25', '2026-09-26', '2026-09-27',
   '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
+  // 2027: 国办发明电〔2026〕10号 (published 2026-11-05).
+  '2027-01-01', '2027-01-02', '2027-01-03',
+  '2027-02-05', '2027-02-06', '2027-02-07', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-02-13',
+  '2027-04-03', '2027-04-04', '2027-04-05',
+  '2027-05-01', '2027-05-02', '2027-05-03', '2027-05-04', '2027-05-05',
+  '2027-06-09',
+  '2027-09-15',
+  '2027-10-01', '2027-10-02', '2027-10-03', '2027-10-04', '2027-10-05', '2027-10-06', '2027-10-07',
 ])
+
+/** Last calendar year whose official holiday notice is included above. */
+export const HOLIDAY_CALENDAR_LAST_YEAR = 2027
+
+/** Whether the instant is later than the last known official holiday calendar (Beijing time). */
+export function isBeyondHolidayCalendar(date: Date): boolean {
+  return beijingCalendar(date).dateKey > `${HOLIDAY_CALENDAR_LAST_YEAR}-12-31`
+}
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')

@@ -1,5 +1,5 @@
 import { findBalanceProvider } from './providers.ts'
-import { isPeakHour, nextPeriodChange, PEAK_EFFECTIVE_FROM } from './pricing.ts'
+import { isBeyondHolidayCalendar, isPeakHour, nextPeriodChange, PEAK_EFFECTIVE_FROM } from './pricing.ts'
 import type { BillingPrice, BillingUsage, UsageFailure, UsageRequestRecord } from './billing.ts'
 import { calculateRequestCost, resolveBillingPrice } from './billing.ts'
 
@@ -22,6 +22,7 @@ export type AdviceCaveat =
   | 'tokener-snapshot'
   | 'no-priced-sample'
   | 'unpriced-omitted'
+  | 'holiday-calendar-stale'
 
 export interface AdviceEstimate {
   kind: 'now' | 'after-change' | 'fresh' | 'alternative'
@@ -294,6 +295,7 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
   if (usedStep5Standard) caveats.push('stepfun-grandfathering')
   if (usedTokener) caveats.push('tokener-snapshot')
   if (omittedUnpriced) caveats.push('unpriced-omitted')
+  if (isBeyondHolidayCalendar(at)) caveats.push('holiday-calendar-stale')
 
   // Catalog versions are collected from estimates actually shown, not unused tables.
   const catalogEntries = [...new Map(
