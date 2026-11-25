@@ -1,6 +1,6 @@
 # Roadmap
 
-Last researched: 2026-11-24. This is the ranked backlog for the automated
+Last researched: 2026-11-25. This is the ranked backlog for the automated
 evolution routine. Each item is sized to ship as one release in a single run:
 implement → `pnpm check` → PR → squash-merge → tag → GitHub release.
 Take the highest unchecked item, unless an upstream break or a pricing change
@@ -33,7 +33,7 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### Bugfix
 
-_Empty — research and add real items (e.g. UI: advisor card/screenshots polish; Bugfix: back-test findings)._
+1. **zh-TW terminology review.** The 0.14.3 zh-TW dictionary was converted from zh with OpenCC (s2twp) plus manual term fixes; have a native reader review billing/advice wording and fix mistranslations, keeping `{placeholders}` intact.  _(patch fix)_
 
 ### Features
 
@@ -49,18 +49,18 @@ _Empty — research and add real items (e.g. UI: advisor card/screenshots polish
 
 ### UX
 
-1. **Traditional Chinese (zh-TW) locale**, following DSH locale fallbacks; check for missing keys in a test.  _(was #14, patch feat)_
-2. **Docs refresh.** Current screenshots (advisor card, session drill-down), advisor/agent-tool docs in README/README_EN, and a short "how estimates are computed" page.  _(was #15, patch docs)_
+1. **Docs refresh.** Current screenshots (advisor card, session drill-down), advisor/agent-tool docs in README/README_EN, and a short "how estimates are computed" page.  _(was #15, patch docs)_
 
 ### UI
 
-_Empty — research and add real items (e.g. UI: advisor card/screenshots polish; Bugfix: back-test findings)._
+1. **Advisor card polish.** Check the advisor card and Usage page at narrow widths and in dark theme (contrast, wrapping of longer zh-TW/en strings), using the `?lang=…&theme=dark` preview, and refresh affected screenshots.  _(patch fix)_
 
 Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
 
+- [x] v0.14.3 — [UX] Traditional Chinese (zh-TW) locale (`zh-tw` language, falls back to `zh` then `en`; key-parity test).
 - [x] v0.14.2 — [Stability] DSH `0.2.3-alpha.*` peer ranges under standard semver (peer fix + tests). Remaining part of old #2 (forked-session double-count, SQLite store) stays open as Stability #1.
 
 - [x] v0.14.1 — [Bugfix] 2027 holiday calendar + calendar-horizon caveat.
