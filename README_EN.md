@@ -36,7 +36,7 @@ The composer readout follows the current session’s provider and model. The Set
 
 ## Compatibility
 
-Plugin `0.14.0` supports DSH **`>=0.2.1-rc.3 <1.0.0-0`** and requires Node.js **24.9+**. DSH includes prereleases in its install and startup checks. Versions in this range require no exemption. The DSH peer ranges explicitly include `0.2.2` prereleases starting at `0.2.2-rc.1` so package managers can resolve them under standard semver rules. The Cordis peer range is `^4.0.5`. Development dependencies are pinned to DSH `0.2.2-rc.1` and Cordis `~4.1.0` for reproducible builds.
+Plugin `0.14.2` supports DSH **`>=0.2.1-rc.3 <1.0.0-0`** and requires Node.js **24.9+**. DSH includes prereleases in its install and startup checks. Versions in this range require no exemption. The DSH peer ranges explicitly include `0.2.2` prereleases starting at `0.2.2-rc.1` and `0.2.3` prereleases starting at `0.2.3-alpha.1`, so package managers can resolve them under standard semver rules. The Cordis peer range is `^4.0.5`. Development dependencies are pinned to DSH `0.2.2-rc.1` and Cordis `~4.1.0` for reproducible builds.
 
 Installation and startup were verified with the web profile on DSH `0.2.1-rc.3` and `0.2.2-rc.5`. For DSH `0.2.1-rc.2`, use plugin `0.11.0`. For DSH `0.2.0-rc.2`, use plugin `0.10.2`.
 
