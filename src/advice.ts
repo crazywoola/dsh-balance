@@ -6,6 +6,8 @@ import { calculateRequestCost, resolveBillingPrice } from './billing.ts'
 export const ADVICE_ROUTE = '/dsh-balance/api/advice'
 /** Number of recent priced requests used to form the next-turn token shape. */
 export const ADVICE_SAMPLE_LIMIT = 8
+/** Assumed summary length written by a `/compact` request (output tokens), capped at a quarter of the history. */
+export const COMPACT_SUMMARY_TOKENS = 4000
 
 /** Official models offered as alternatives when that provider is configured. Tokener is session/current only. */
 const ADVICE_CATALOG_MODELS: Readonly<Record<string, readonly string[]>> = {
@@ -23,9 +25,10 @@ export type AdviceCaveat =
   | 'no-priced-sample'
   | 'unpriced-omitted'
   | 'holiday-calendar-stale'
+  | 'compact-assumptions'
 
 export interface AdviceEstimate {
-  kind: 'now' | 'after-change' | 'fresh' | 'alternative'
+  kind: 'now' | 'after-change' | 'fresh' | 'compact' | 'alternative'
   provider: string
   model: string
   at: string
@@ -59,6 +62,8 @@ export interface AdviceSuccess {
   now?: AdviceEstimate
   afterChange?: AdviceEstimate
   fresh?: AdviceEstimate
+  /** `/compact` now: summarizer request plus the next turn on the compacted context. */
+  compact?: AdviceEstimate
   alternatives: AdviceEstimate[]
   cacheSavings?: { costUsd: number | null; costCny?: number; combinedCny: number | null }
   coverage: AdviceCoverage
@@ -109,6 +114,40 @@ export function recentPricedRequests(records: readonly UsageRequestRecord[], lim
     .filter(record => record.billingStatus === 'priced')
     .sort((left, right) => left.time.localeCompare(right.time) || left.seq - right.seq)
     .slice(-Math.max(limit, 0))
+}
+
+/**
+ * Token usage of the `/compact` summarizer request: it reads the whole history
+ * (cached part stays a cache hit) and writes a bounded summary.
+ */
+export function compactSummarizerUsage(shape: BillingUsage, summaryTokens = COMPACT_SUMMARY_TOKENS): BillingUsage {
+  const history = shape.inputTokens + shape.cacheReadTokens
+  return {
+    inputTokens: shape.inputTokens,
+    outputTokens: Math.min(summaryTokens, Math.floor(history / 4)),
+    cacheReadTokens: shape.cacheReadTokens,
+    cacheWriteTokens: 0,
+  }
+}
+
+/**
+ * Token usage of the first turn after compaction: the system prefix (smallest
+ * cache hit seen in the session) still hits; the summary and the new input miss.
+ */
+export function postCompactUsage(shape: BillingUsage, prefixTokens: number, summaryTokens: number): BillingUsage {
+  return {
+    inputTokens: shape.inputTokens + summaryTokens,
+    outputTokens: shape.outputTokens,
+    cacheReadTokens: Math.min(prefixTokens, shape.cacheReadTokens),
+    cacheWriteTokens: shape.cacheWriteTokens,
+  }
+}
+
+function addEstimates(left: AdviceEstimate, right: AdviceEstimate): AdviceEstimate {
+  const usd = left.costUsd === null && right.costUsd === null ? null : roundMoney((left.costUsd ?? 0) + (right.costUsd ?? 0))
+  const cny = left.costCny === undefined && right.costCny === undefined ? undefined : roundMoney((left.costCny ?? 0) + (right.costCny ?? 0))
+  const combined = left.combinedCny === null || right.combinedCny === null ? null : roundMoney(left.combinedCny + right.combinedCny)
+  return { ...left, kind: 'compact', costUsd: usd, ...(cny === undefined ? {} : { costCny: cny }), combinedCny: combined }
 }
 
 /** Per-bucket median of the sample; fields are independent and may not match any one request. */
@@ -245,6 +284,16 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
     ? estimate('fresh', current.provider, current.model, freshSessionUsage(tokenShape), at, overrides, usdToCny)
     : undefined
 
+  let compact: AdviceEstimate | undefined
+  if (current !== undefined && tokenShape !== undefined && tokenShape.inputTokens + tokenShape.cacheReadTokens > 0) {
+    const prefixes = input.records.filter(record => record.billingStatus === 'priced' && record.cacheReadTokens > 0).map(record => record.cacheReadTokens)
+    const prefix = prefixes.length === 0 ? 0 : Math.min(...prefixes)
+    const summarizer = compactSummarizerUsage(tokenShape)
+    const summarizerCost = estimate('compact', current.provider, current.model, summarizer, at, overrides, usdToCny)
+    const after = estimate('compact', current.provider, current.model, postCompactUsage(tokenShape, prefix, summarizer.outputTokens), at, overrides, usdToCny)
+    if (summarizerCost !== undefined && after !== undefined) compact = addEstimates(summarizerCost, after)
+  }
+
   const candidates: { provider: string; model: string }[] = []
   const push = (value: { provider: string; model: string }) => {
     const provider = findBalanceProvider(value.provider)?.id ?? value.provider
@@ -280,7 +329,7 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
   const pricedRequests = input.records.filter(record => record.billingStatus === 'priced').length
   const freeRequests = input.records.filter(record => record.billingStatus === 'free').length
   const unpricedRequests = input.records.filter(record => record.billingStatus === 'unpriced').length
-  const estimates = [now, afterChange, fresh, ...alternatives]
+  const estimates = [now, afterChange, fresh, compact, ...alternatives]
   const usedStep5Standard = estimates.some(item =>
     item?.provider === 'stepfun' && item.model === 'step-5-preview' && item.pricingVersion !== 'stepfun-reference-2026-09-30')
   const usedTokener = estimates.some(item => item?.provider === 'tokener')
@@ -295,11 +344,12 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
   if (usedStep5Standard) caveats.push('stepfun-grandfathering')
   if (usedTokener) caveats.push('tokener-snapshot')
   if (omittedUnpriced) caveats.push('unpriced-omitted')
+  if (compact !== undefined) caveats.push('compact-assumptions')
   if (isBeyondHolidayCalendar(at)) caveats.push('holiday-calendar-stale')
 
   // Catalog versions are collected from estimates actually shown, not unused tables.
   const catalogEntries = [...new Map(
-    [now, afterChange, fresh, ...alternatives]
+    [now, afterChange, fresh, compact, ...alternatives]
       .filter((item): item is AdviceEstimate => item !== undefined)
       .map(item => [`${item.provider}:${item.pricingVersion}`, { provider: item.provider, pricingVersion: item.pricingVersion }]),
   ).values()]
@@ -318,6 +368,7 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
     ...(now === undefined ? {} : { now }),
     ...(afterChange === undefined ? {} : { afterChange }),
     ...(fresh === undefined ? {} : { fresh }),
+    ...(compact === undefined ? {} : { compact }),
     alternatives,
     ...(now !== undefined && fresh !== undefined ? { cacheSavings: savings(now, fresh) } : {}),
     coverage: {

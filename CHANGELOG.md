@@ -8,7 +8,10 @@ for features, patch for fixes). Full notes for each version are on the
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-26
+
 ### Added
+- [Features] The advisor now prices `/compact` now (summarizer request over the whole history plus the first post-compact turn, with only the smallest session cache-hit prefix still hitting) next to continue / wait / fresh, in the API, card and dock, zh/zh-TW/en, with an assumptions caveat.
 - `ROADMAP.md` with the ranked release backlog.
 
 ## [0.14.4] - 2026-11-26

@@ -1,6 +1,6 @@
 {
   "name": "@pinkbanana/dsh-balance",
-  "version": "0.14.4",
+  "version": "0.15.0",
   "description": "DeepSeek Harness plugin for multi-provider API balances, available models, and usage billing",
   "repository": {
     "type": "git",

@@ -151,6 +151,8 @@ Built-in estimates use [official DeepSeek USD rates](https://api-docs.deepseek.c
 
 ## Next-turn estimates
 
+Besides continue / wait for the next peak change / fresh session, the card now prices **`/compact` now**: one summarizer request over the whole history (about 4,000 output tokens assumed, at most a quarter of the history) plus the first turn afterwards, where only the smallest cache-hit prefix seen in the session still hits. Estimate only; nothing is compacted automatically.
+
 The session Usage tab shows a next-turn estimate card. The composer balance dock can expand the same estimate on demand; it stays collapsed by default so it does not clutter the row. The token shape is the per-bucket median of the session’s most recent priced requests (uncached input, cache read, cache write, output), priced through the existing billing engines rather than a second pricing path. The next turn may not match, for example after compaction, a large paste, or vision input.
 
 The response includes the current period, the next peak-change time, the sample size, the token shape, estimates for the current model now, after the change, and as a fresh session, plus other configured official models that can be priced. Unpriced models are omitted rather than shown as $0. Native USD and CNY are shown separately; a combined CNY total appears only when `usdToCny` is set. The Host route is `GET /dsh-balance/api/advice?session=…`, loopback-only, and the payload never includes prompt or session text.
