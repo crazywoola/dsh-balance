@@ -8,6 +8,11 @@ for features, patch for fixes). Full notes for each version are on the
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-26
+
+### Added
+- [Stability] GitHub Actions CI: runs `pnpm check` on PRs and `main` (Node 24.22.x and 26.x) and, for `v*` tags, verifies the tag matches the `package.json` version.
+
 ## [0.15.0] - 2026-11-26
 
 ### Added
