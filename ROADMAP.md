@@ -37,7 +37,7 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### Features
 
-1. **Four-way next-step advisor.** Extend the advisor to continue / wait for off-peak / `/compact` now / fresh session. `/compact` = summarizer request cost (DSH 0.2.3 uses the model that answered last) + post-compact cache shape (system prefix still hits, rewritten history misses).  _(was #4, minor feat)_
+1. **Four-way next-step advisor.** _(shipped v0.15.0 as `/compact` now: continue / wait / compact / fresh; remaining: ranking the cheapest step.)_ Extend the advisor to continue / wait for off-peak / `/compact` now / fresh session. `/compact` = summarizer request cost (DSH 0.2.3 uses the model that answered last) + post-compact cache shape (system prefix still hits, rewritten history misses).  _(was #4, minor feat)_
 2. **Compaction payback and cache-cliff line.** Detect compaction events in session logs; show what the turn after a compaction actually cost vs. the pre-compaction turn, and after how many turns the compaction pays back.  _(was #5, minor feat)_
 3. **Advisor accuracy back-test.** Replay each session's history: compare predicted vs. actual next-turn cost, show an error band on the card, and add regression fixtures. Gate item 7 on a reasonable error band.  _(was #6, patch feat)_
 4. **Read-only `dsh_balance_advise` agent tool.** Returns the four-way estimate for the current session so the model can decide to compact, wait or switch. Never acts on its own; documented in both READMEs.  _(was #7, minor feat)_
@@ -60,6 +60,8 @@ Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
+
+- [x] v0.15.0 — [Features] `/compact` now estimate in the advisor (API, card, dock; zh/zh-TW/en). Follow-up idea: highlight the cheapest of the four steps.
 
 - [x] v0.14.4 — [UI] Advisor card polish: Usage page forwards the advisor loader, amounts wrap cleanly at narrow widths/dark theme, preview renders advisor + zh-TW.
 - [x] v0.14.3 — [UX] Traditional Chinese (zh-TW) locale (`zh-tw` language, falls back to `zh` then `en`; key-parity test).

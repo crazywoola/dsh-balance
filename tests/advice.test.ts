@@ -5,7 +5,9 @@ import type { BillingUsage, UsageRequestRecord } from '../src/billing.ts'
 import {
   ADVICE_SAMPLE_LIMIT,
   buildAdvice,
+  compactSummarizerUsage,
   freshSessionUsage,
+  postCompactUsage,
   medianTokenShape,
   medianTokens,
   recentPricedRequests,
@@ -99,7 +101,7 @@ describe('buildAdvice', () => {
     expect(current.cacheSavings).toEqual({ costUsd: 0.147, combinedCny: null })
     expect(current.alternatives.some(item => item.model === 'deepseek-v4-pro')).toBe(true)
     expect(current.alternatives.some(item => item.model === 'deepseek-v4-flash' || item.model === 'deepseek-flash')).toBe(false)
-    expect(current.caveats).toEqual(['estimate-not-a-bill', 'shape-may-differ'])
+    expect(current.caveats).toEqual(['estimate-not-a-bill', 'shape-may-differ', 'compact-assumptions'])
     expect(JSON.stringify(current)).not.toMatch(/prompt|SECRET/i)
 
     const historical = buildAdvice({
@@ -268,5 +270,38 @@ describe('buildAdvice', () => {
     expect(empty.caveats).toContain('no-priced-sample')
     expect(empty.caveats).toContain('estimate-not-a-bill')
     expect(empty.caveats).not.toContain('shape-may-differ')
+  })
+})
+
+describe('compact estimate', () => {
+  it('bounds the summary and keeps only the system prefix cached afterwards', () => {
+    const shape = { inputTokens: 100_000, outputTokens: 500, cacheReadTokens: 300_000, cacheWriteTokens: 0 }
+    const summary = compactSummarizerUsage(shape)
+    expect(summary).toEqual({ inputTokens: 100_000, outputTokens: 4000, cacheReadTokens: 300_000, cacheWriteTokens: 0 })
+    expect(compactSummarizerUsage({ ...shape, inputTokens: 40, cacheReadTokens: 0 }).outputTokens).toBe(10)
+    expect(postCompactUsage(shape, 12_000, 4000)).toEqual({ inputTokens: 104_000, outputTokens: 500, cacheReadTokens: 12_000, cacheWriteTokens: 0 })
+    expect(postCompactUsage(shape, 900_000, 4000).cacheReadTokens).toBe(300_000)
+  })
+
+  it('sums summarizer and post-compact turn costs on the current model', () => {
+    const at = new Date('2026-09-10T04:00:00Z')
+    const records = [
+      record({ seq: 1, time: at.toISOString(), inputTokens: 10, outputTokens: 5, cacheReadTokens: 100 }),
+      record({ seq: 2, time: at.toISOString(), inputTokens: 10, outputTokens: 5, cacheReadTokens: 400 }),
+    ]
+    const advice = buildAdvice({ sessionId: 's', records, at, configuredProviders: ['deepseek'] })
+    const shape = advice.tokenShape!
+    const summary = compactSummarizerUsage(shape)
+    const expected = expectedCost('deepseek', 'deepseek-flash', summary, at)
+      + expectedCost('deepseek', 'deepseek-flash', postCompactUsage(shape, 100, summary.outputTokens), at)
+    expect(advice.compact?.kind).toBe('compact')
+    expect(advice.compact?.costUsd).toBeCloseTo(expected, 12)
+    expect(advice.caveats).toContain('compact-assumptions')
+  })
+
+  it('omits the compact estimate without a priced sample', () => {
+    const advice = buildAdvice({ sessionId: 's', records: [] })
+    expect(advice.compact).toBeUndefined()
+    expect(advice.caveats).not.toContain('compact-assumptions')
   })
 })

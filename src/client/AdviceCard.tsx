@@ -84,11 +84,13 @@ function CompactAdvice({ advice, t, usdToCny, locale }: { advice: AdviceSuccess;
   const now = advice.now === undefined ? t('advice.noEstimate') : formatCost(advice.now, locale, usdToCny, t)
   const after = advice.afterChange === undefined ? undefined : formatCost(advice.afterChange, locale, usdToCny, t)
   const fresh = advice.fresh === undefined ? undefined : formatCost(advice.fresh, locale, usdToCny, t)
+  const compactCost = advice.compact === undefined ? undefined : formatCost(advice.compact, locale, usdToCny, t)
   return (
     <div className="dsh-advice-dock">
       <span>{t('advice.now')}: {now}</span>
       {after === undefined ? null : <span> · {t('advice.afterChange')}: {after}</span>}
       {fresh === undefined ? null : <span> · {t('advice.fresh')}: {fresh}</span>}
+      {compactCost === undefined ? null : <span> · {t('advice.compact')}: {compactCost}</span>}
       <div className="dsh-advice-note">{t('advice.estimateOnly')}</div>
     </div>
   )
@@ -134,6 +136,7 @@ function PanelAdvice({ advice, t, usdToCny, locale }: { advice: AdviceSuccess; t
       {advice.now === undefined ? <p className="dsh-advice-meta">{t('advice.noEstimate')}</p> : <EstimateRow label={t('advice.now')} estimate={advice.now} t={t} usdToCny={usdToCny} locale={locale} />}
       {advice.afterChange === undefined ? null : <EstimateRow label={t('advice.afterChange')} estimate={advice.afterChange} t={t} usdToCny={usdToCny} locale={locale} />}
       {advice.fresh === undefined ? null : <EstimateRow label={t('advice.fresh')} estimate={advice.fresh} t={t} usdToCny={usdToCny} locale={locale} />}
+      {advice.compact === undefined ? null : <EstimateRow label={t('advice.compact')} estimate={advice.compact} t={t} usdToCny={usdToCny} locale={locale} />}
       {advice.cacheSavings === undefined ? null : (
         <div className="dsh-advice-row">
           <span>{t('advice.cacheSavings')}</span>
