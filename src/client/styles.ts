@@ -280,7 +280,10 @@ export const balanceStyles = `
 .dsh-advice-card-head .dsh-balance-heading { font-size: 16px; }
 .dsh-advice-meta { margin: 0; color: var(--ledger-muted); font-size: 12px; line-height: 1.6; }
 .dsh-advice-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; }
-.dsh-advice-row strong { font-variant-numeric: tabular-nums; }
+.dsh-advice-row strong { font-variant-numeric: tabular-nums; min-width: 0; }
+.dsh-advice-amount { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+.dsh-advice-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.dsh-advice-meta, .dsh-advice-caveats li { overflow-wrap: anywhere; }
 .dsh-advice-row small { flex-basis: 100%; color: var(--ledger-muted); font-size: 11px; }
 .dsh-advice-alternatives { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ledger-line); }
 .dsh-advice-caveats { margin: 0; padding-left: 18px; color: var(--ledger-muted); font-size: 11px; line-height: 1.6; }

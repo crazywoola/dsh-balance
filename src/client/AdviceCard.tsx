@@ -26,13 +26,23 @@ function combined(estimate: Pick<AdviceEstimate, 'costUsd' | 'costCny' | 'combin
   return (estimate.costCny ?? 0) + (estimate.costUsd ?? 0) * rate
 }
 
-function formatCost(estimate: Pick<AdviceEstimate, 'costUsd' | 'costCny' | 'combinedCny'>, locale: string, rate: number | null | undefined, t: AdviceCardProps['t']): string {
+export function formatCostParts(estimate: Pick<AdviceEstimate, 'costUsd' | 'costCny' | 'combinedCny'>, locale: string, rate: number | null | undefined, t: AdviceCardProps['t']): string[] {
   const parts: string[] = []
   if (estimate.costUsd !== null) parts.push(displayAmount(String(estimate.costUsd), 'USD', locale))
   if (estimate.costCny !== undefined) parts.push(displayAmount(String(estimate.costCny), 'CNY', locale))
   const converted = combined(estimate, rate)
   if (converted !== null && estimate.costUsd !== null) parts.push(`${displayAmount(String(converted), 'CNY', locale)} (${t('billing.fixedRate')})`)
-  return parts.length === 0 ? t('advice.noEstimate') : parts.join(' · ')
+  return parts.length === 0 ? [t('advice.noEstimate')] : parts
+}
+
+function formatCost(estimate: Pick<AdviceEstimate, 'costUsd' | 'costCny' | 'combinedCny'>, locale: string, rate: number | null | undefined, t: AdviceCardProps['t']): string {
+  return formatCostParts(estimate, locale, rate, t).join(' · ')
+}
+
+/** Each amount stays on one line; long rows wrap between amounts, never inside "(fixed rate)". */
+function CostText({ estimate, locale, usdToCny, t }: { estimate: Pick<AdviceEstimate, 'costUsd' | 'costCny' | 'combinedCny'>; locale: string; usdToCny: number | null; t: AdviceCardProps['t'] }) {
+  const parts = formatCostParts(estimate, locale, usdToCny, t)
+  return <strong className="dsh-advice-cost">{parts.map((part, index) => <span key={index}>{index > 0 ? ' · ' : ''}<span className="dsh-advice-amount">{part}</span></span>)}</strong>
 }
 
 /** Session-shaped next-turn estimates. Prompt text is never requested or rendered. */
@@ -94,7 +104,7 @@ function EstimateRow({ label, estimate, t, usdToCny, locale }: {
   return (
     <div className="dsh-advice-row">
       <span>{label}</span>
-      <strong>{formatCost(estimate, locale, usdToCny, t)}</strong>
+      <CostText estimate={estimate} locale={locale} usdToCny={usdToCny} t={t} />
       <small>{estimate.provider} / {estimate.model} · {t(`advice.period.${estimate.period}` as DshBalanceLocaleKey)}</small>
     </div>
   )
@@ -127,7 +137,7 @@ function PanelAdvice({ advice, t, usdToCny, locale }: { advice: AdviceSuccess; t
       {advice.cacheSavings === undefined ? null : (
         <div className="dsh-advice-row">
           <span>{t('advice.cacheSavings')}</span>
-          <strong>{formatCost({ costUsd: advice.cacheSavings.costUsd, combinedCny: advice.cacheSavings.combinedCny, ...(advice.cacheSavings.costCny === undefined ? {} : { costCny: advice.cacheSavings.costCny }) }, locale, usdToCny, t)}</strong>
+          <CostText estimate={{ costUsd: advice.cacheSavings.costUsd, combinedCny: advice.cacheSavings.combinedCny, ...(advice.cacheSavings.costCny === undefined ? {} : { costCny: advice.cacheSavings.costCny }) }} locale={locale} usdToCny={usdToCny} t={t} />
         </div>
       )}
       {advice.alternatives.length > 0 ? (

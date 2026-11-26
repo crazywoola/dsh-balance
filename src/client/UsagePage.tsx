@@ -5,9 +5,9 @@ import type { UsageTabInjected } from './BillingTab.tsx'
 
 export type UsagePageProps = PropsRuntime<'main'> & InjectFace<UsageTabInjected> & PropsLocale<typeof LOCALE_NS>
 
-export function UsagePage({ loadUsage, t }: UsagePageProps) {
+export function UsagePage({ loadUsage, loadAdvice, t }: UsagePageProps) {
   return <main className="dsh-usage-page" aria-label={t('nav.usage')}><div className="dsh-usage-content">
-    <BillingOverview loadUsage={loadUsage} t={t} />
+    <BillingOverview loadUsage={loadUsage} {...(loadAdvice === undefined ? {} : { loadAdvice })} t={t} />
   </div></main>
 }
 
