@@ -8,10 +8,12 @@ import { BillingView } from '../../src/client/BillingTab.tsx'
 import { DeepSeekPanel } from '../../src/client/DeepSeekPanel.tsx'
 import { balanceStyles } from '../../src/client/styles.ts'
 import { en, zh } from '../../src/client/locales.ts'
+import { zhTW } from '../../src/client/locales-zh-tw.ts'
 import { aggregateBilling } from '../../src/billing.ts'
 
 const params = new URLSearchParams(location.search)
-const locale = params.get('lang') === 'en' ? en : zh
+const lang = params.get('lang')
+const locale = lang === 'en' ? en : lang === 'zh-tw' ? { ...zh, ...zhTW } : zh
 const state = params.get('state')
 const dense = params.get('dense') === '1'
 document.documentElement.lang = locale['locale.tag']
@@ -34,6 +36,19 @@ const loadBalance = async (refresh, signal, provider = 'deepseek') => {
       ? [{ currency: 'CNY', totalBalance: params.get('amount') ?? '256.80', totalCashBalance: '500', totalVoucherBalance: '26' }]
       : [{ currency: 'CNY', totalBalance: '128.50', toppedUpBalance: '120', grantedBalance: '8.50' }, { currency: 'USD', totalBalance: '18.25', toppedUpBalance: '17', grantedBalance: '1.25' }],
   }
+}
+const loadAdvice = async () => {
+  await new Promise(resolve => setTimeout(resolve, 200))
+  const estimate = (provider, model, costUsd, costCny, period = 'peak') => ({ provider, model, costUsd, ...(costCny === undefined ? {} : { costCny }), combinedCny: costUsd === null ? costCny ?? null : costUsd * 7.2 + (costCny ?? 0), period, pricingVersion: '2026-11' })
+  return { ok: true, estimateOnly: true, sessionId: 'preview', fetchedAt, currentPeriod: 'peak', nextChangeAt: new Date(Date.now() + 3_600_000).toISOString(),
+    sampleSize: 20, sampleLimit: 20, tokenShape: { inputTokens: 123456, outputTokens: 7890, cacheReadTokens: 1234567, cacheWriteTokens: 0 },
+    now: estimate('deepseek-official', 'deepseek-v4-pro', 0.012345, undefined),
+    afterChange: estimate('deepseek-official', 'deepseek-v4-pro', 0.006172, undefined, 'off-peak'),
+    fresh: estimate('deepseek-official', 'deepseek-v4-pro', 0.054321, undefined),
+    cacheSavings: { costUsd: 0.041976, combinedCny: 0.302227 },
+    alternatives: [estimate('StepFun', 'evaluation-model-with-an-extra-long-identifier-and-context-window-2026-preview', null, 0.0912, 'standard')],
+    coverage: { status: 'partial', pricedRequests: 18, unpricedRequests: 2, requests: 20, catalog: [{ provider: 'deepseek-official', pricingVersion: '2026-11-24' }, { provider: 'stepfun', pricingVersion: '2026-11-25' }] },
+    caveats: ['estimate-not-a-bill', 'shape-may-differ', 'stepfun-grandfathering', 'tokener-snapshot', 'unpriced-omitted', 'holiday-calendar-stale'] }
 }
 const loadModels = async (refresh, signal, provider = 'deepseek') => {
   await new Promise(resolve => setTimeout(resolve, provider === 'stepfun' ? 500 : 200))
@@ -100,10 +115,10 @@ function Preview() {
     {['usage', 'session'].includes(params.get('page')) ? null : <div style={{ padding: '16px', marginBottom: '24px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '8px' }}>
       <Dropdown label="示例模型 / Sample model" value={choice} options={choices.map((item, index) => ({ value: String(index), label: `${item.provider} / ${item.model}` }))}
         onChange={value => { setChoice(value); snapshot = { ...snapshot, current: choices[Number(value)] }; listeners.forEach(listener => listener()) }} />
-      <BalanceDock t={t} selection={selection} sessionId="preview" loadBalance={loadBalance} />
+      <BalanceDock t={t} loadAdvice={loadAdvice} selection={selection} sessionId="preview" loadBalance={loadBalance} />
     </div>}
-    {params.get('page') === 'session' ? <BillingView t={t} loadUsage={loadUsage} sessionId="preview" useSession={() => false} useProjection={() => ({})} />
-      : params.get('page') === 'usage' ? <UsagePage t={t} loadUsage={loadUsage} /> : <DeepSeekPanel t={t} loadBalance={loadBalance} loadModels={loadModels} loadUsage={loadUsage} />}
+    {params.get('page') === 'session' ? <BillingView t={t} loadAdvice={loadAdvice} loadUsage={loadUsage} sessionId="preview" useSession={() => false} useProjection={() => ({})} />
+      : params.get('page') === 'usage' ? <UsagePage t={t} loadUsage={loadUsage} loadAdvice={loadAdvice} /> : <DeepSeekPanel t={t} loadBalance={loadBalance} loadModels={loadModels} loadUsage={loadUsage} />}
   </>
 }
 createRoot(document.getElementById('root')).render(<Preview />)

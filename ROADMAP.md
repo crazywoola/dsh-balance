@@ -53,13 +53,15 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### UI
 
-1. **Advisor card polish.** Check the advisor card and Usage page at narrow widths and in dark theme (contrast, wrapping of longer zh-TW/en strings), using the `?lang=…&theme=dark` preview, and refresh affected screenshots.  _(patch fix)_
+1. **Dark-theme/narrow screenshot refresh.** Re-capture the advisor card and Usage page docs screenshots (zh-TW and en, dark, ≤360px) with `pnpm preview` now that the preview renders the advisor.  _(patch docs)_
+2. **Advisor dock polish.** Review the compact composer-dock advisor at narrow widths: wrap `now · after · fresh` as separate non-breaking amounts like the card.  _(patch fix)_
 
 Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
 
+- [x] v0.14.4 — [UI] Advisor card polish: Usage page forwards the advisor loader, amounts wrap cleanly at narrow widths/dark theme, preview renders advisor + zh-TW.
 - [x] v0.14.3 — [UX] Traditional Chinese (zh-TW) locale (`zh-tw` language, falls back to `zh` then `en`; key-parity test).
 - [x] v0.14.2 — [Stability] DSH `0.2.3-alpha.*` peer ranges under standard semver (peer fix + tests). Remaining part of old #2 (forked-session double-count, SQLite store) stays open as Stability #1.
 

@@ -11,6 +11,13 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - `ROADMAP.md` with the ranked release backlog.
 
+## [0.14.4] - 2026-11-26
+
+### Fixed
+- [UI] The Usage page now forwards the advisor loader, so the next-turn estimate card appears when drilling into a session there (it was only shown in the session tab).
+- [UI] Advisor card amounts no longer break inside the "(fixed-rate conversion)" label at narrow widths; long model ids, catalog lines and caveats wrap instead of overflowing.
+- [UI] The fixture preview now renders the advisor card/dock and supports `?lang=zh-tw`, so narrow-width and dark-theme checks cover zh-TW and en.
+
 ## [0.14.3] - 2026-11-25
 
 ### Added
