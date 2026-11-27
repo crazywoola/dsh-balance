@@ -23,7 +23,7 @@ The composer readout follows the current session’s provider and model. The Set
 - Cache query results with manual refresh support
 - Annotate the model list with catalogued reference rates (input/output per million tokens); models without published pricing are marked explicitly
 - Drill from the Sessions category into any session's full request breakdown and back to the overview
-- Estimate the next turn from this session’s recent priced token mix: the current period, after the next peak change, a fresh session (all cache-miss), and other official models already configured in this Harness that can actually be priced, plus how much cache saves by continuing versus starting over. These are estimates, not an official bill; the plugin never auto-switches models and never sends session text off the machine
+- Estimate the next turn from this session’s recent priced token mix: the current period, after the next peak change, a fresh session (all cache-miss), compact now (summarizer request plus the first post-compact turn; about 4,000 summary tokens assumed), and other official models already configured in this Harness that can actually be priced, plus how much cache saves by continuing versus starting over. These are estimates, not an official bill; the plugin never auto-switches models and never sends session text off the machine. See [How estimates are computed](./docs/estimates.en.md) for the details.
 - Export the current view as JSON or CSV (overview: full summary or the visible category; session: request-level records) — data never leaves the machine
 - Enter a display-only USD→CNY rate on the usage page (kept in browser localStorage, no restart); the plugin's `usdToCny` config still takes precedence
 - Replace built-in prices with `pricingOverrides` (matched by provider + model, optional `effectiveFrom`); the model list and usage estimates follow
@@ -151,13 +151,19 @@ Built-in estimates use [official DeepSeek USD rates](https://api-docs.deepseek.c
 
 ## Next-turn estimates
 
-Besides continue / wait for the next peak change / fresh session, the card now prices **`/compact` now**: one summarizer request over the whole history (about 4,000 output tokens assumed, at most a quarter of the history) plus the first turn afterwards, where only the smallest cache-hit prefix seen in the session still hits. Estimate only; nothing is compacted automatically.
+The session Usage tab shows a next-turn estimate card; the same card appears when you drill into a session from Usage Statistics. The composer balance dock can expand the estimate on demand; it stays collapsed by default so it does not clutter the row.
 
-The session Usage tab shows a next-turn estimate card. The composer balance dock can expand the same estimate on demand; it stays collapsed by default so it does not clutter the row. The token shape is the per-bucket median of the session’s most recent priced requests (uncached input, cache read, cache write, output), priced through the existing billing engines rather than a second pricing path. The next turn may not match, for example after compaction, a large paste, or vision input.
+The card compares four next steps: continue in the current period, wait for the next peak change, **`/compact` now** (summarizer request plus the first post-compact turn; about 4,000 summary tokens, at most a quarter of the history), and a fresh session (all cache-miss), plus how much cache saves by continuing versus starting over. It can also compare other official models already configured in this Harness that can be priced. These are estimates only; nothing is compacted or switched automatically.
 
-The response includes the current period, the next peak-change time, the sample size, the token shape, estimates for the current model now, after the change, and as a fresh session, plus other configured official models that can be priced. Unpriced models are omitted rather than shown as $0. Native USD and CNY are shown separately; a combined CNY total appears only when `usdToCny` is set. The Host route is `GET /dsh-balance/api/advice?session=…`, loopback-only, and the payload never includes prompt or session text.
+The token shape is the per-bucket median of the session’s most recent 8 priced requests (uncached input, cache read, cache write, output), priced through the same billing engines as usage totals rather than a second pricing path. The next turn may not match, for example after compaction, a large paste, or vision input. The full method, peak-hour rules, and limitations are in [How estimates are computed](./docs/estimates.en.md).
 
-These figures are published-rate estimates, not an official bill. When the post-2026-10-14 standard StepFun `step-5-preview` cache-hit rate is used, the UI notes that some accounts may still be grandfathered at 0.35 CNY per million tokens; the plugin cannot detect that. Tokener estimates use the 2026-11-03 catalog snapshot, without vendor rates or the DeepSeek peak multiplier.
+![Next-turn estimate card](./docs/dsh-advisor-card-en.png)
+
+![Session drill-down with the estimate card](./docs/dsh-session-drilldown-en.png)
+
+These figures are published-rate estimates, not an official bill. When the post-2026-10-14 standard StepFun `step-5-preview` cache-hit rate is used, the UI notes that some accounts may still be grandfathered at 0.35 CNY per million tokens; the plugin cannot detect that. Tokener estimates use the 2026-11-03 catalog snapshot, without vendor rates or the DeepSeek peak multiplier. Unpriced models are omitted rather than shown as $0. Native USD and CNY are shown separately; a combined CNY total appears only when `usdToCny` is set.
+
+The local read-only route is `GET /dsh-balance/api/advice?session=…` (`sessionId` is also accepted), loopback-only, and the payload never includes prompt or session text. This version has no agent tool the model can call; a read-only `dsh_balance_advise` tool is still on the [roadmap](./ROADMAP.md).
 
 ## Extension and design
 
@@ -174,7 +180,7 @@ pnpm check
 pnpm preview
 ```
 
-The preview uses no real credentials. Use `?lang=en&theme=dark` for English/dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The sample model selector also exercises the composer readout. StepFun balance and model queries and the redesigned account page are available starting with `0.6.0`. Live model balances, and usage accounting fixes are available starting with `0.7.0`.
+The preview uses no real credentials. Use `?page=session` for the conversation usage view and next-turn estimate card (the fixture includes compact now), or `?page=usage` for the statistics overview and session drill-down. Add `?lang=en&theme=dark` or `?lang=zh-tw` for English, Traditional Chinese, and dark mode, or `?state=missing`, `error`, `empty`, or `loading` to inspect those states. The sample model selector also exercises the composer readout and the expandable estimate. See [How estimates are computed](./docs/estimates.en.md) for the method. StepFun balance and model queries and the redesigned account page are available starting with `0.6.0`. Live model balances, and usage accounting fixes are available starting with `0.7.0`.
 
 ## License
 

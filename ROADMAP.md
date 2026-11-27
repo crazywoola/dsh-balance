@@ -1,6 +1,6 @@
 # Roadmap
 
-Last researched: 2026-11-25. This is the ranked backlog for the automated
+Last researched: 2026-11-27. This is the ranked backlog for the automated
 evolution routine. Each item is sized to ship as one release in a single run:
 implement → `pnpm check` → PR → squash-merge → tag → GitHub release.
 Take the highest unchecked item, unless an upstream break or a pricing change
@@ -49,7 +49,9 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### UX
 
-1. **Docs refresh.** Current screenshots (advisor card, session drill-down), advisor/agent-tool docs in README/README_EN, and a short "how estimates are computed" page.  _(was #15, patch docs)_
+1. ~~**Docs refresh.**~~ _(shipped v0.15.3)_ Current screenshots (advisor card, session drill-down), advisor docs and the planned-but-unshipped `dsh_balance_advise` note in README/README_EN, plus `docs/estimates.md` (zh/en).
+2. **Advisor empty/unavailable guidance.** When there is no priced sample, or advice fails to load, add a short next step (why estimates are missing, try refresh, open Usage) instead of only a status line.  _(patch ux)_
+3. **Remember dock expanded state.** Persist the composer-dock advisor open/closed state in the tab (sessionStorage) so it does not collapse on every navigation within a session.  _(patch ux)_
 
 ### UI
 
@@ -60,6 +62,8 @@ Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
+
+- [x] v0.15.3 — [UX] Docs refresh (advisor/session screenshots, estimates guide, README agent-tool note; preview fixture includes /compact).
 
 - [x] v0.15.2 — [Bugfix] zh-TW terminology review (Taiwan wording, regression test).
 
