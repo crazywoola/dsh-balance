@@ -41,14 +41,15 @@ const loadAdvice = async () => {
   await new Promise(resolve => setTimeout(resolve, 200))
   const estimate = (provider, model, costUsd, costCny, period = 'peak') => ({ provider, model, costUsd, ...(costCny === undefined ? {} : { costCny }), combinedCny: costUsd === null ? costCny ?? null : costUsd * 7.2 + (costCny ?? 0), period, pricingVersion: '2026-11' })
   return { ok: true, estimateOnly: true, sessionId: 'preview', fetchedAt, currentPeriod: 'peak', nextChangeAt: new Date(Date.now() + 3_600_000).toISOString(),
-    sampleSize: 20, sampleLimit: 20, tokenShape: { inputTokens: 123456, outputTokens: 7890, cacheReadTokens: 1234567, cacheWriteTokens: 0 },
+    sampleSize: 8, sampleLimit: 8, tokenShape: { inputTokens: 123456, outputTokens: 7890, cacheReadTokens: 1234567, cacheWriteTokens: 0 },
     now: estimate('deepseek-official', 'deepseek-v4-pro', 0.012345, undefined),
     afterChange: estimate('deepseek-official', 'deepseek-v4-pro', 0.006172, undefined, 'off-peak'),
     fresh: estimate('deepseek-official', 'deepseek-v4-pro', 0.054321, undefined),
+    compact: estimate('deepseek-official', 'deepseek-v4-pro', 0.0298, undefined),
     cacheSavings: { costUsd: 0.041976, combinedCny: 0.302227 },
     alternatives: [estimate('StepFun', 'evaluation-model-with-an-extra-long-identifier-and-context-window-2026-preview', null, 0.0912, 'standard')],
     coverage: { status: 'partial', pricedRequests: 18, unpricedRequests: 2, requests: 20, catalog: [{ provider: 'deepseek-official', pricingVersion: '2026-11-24' }, { provider: 'stepfun', pricingVersion: '2026-11-25' }] },
-    caveats: ['estimate-not-a-bill', 'shape-may-differ', 'stepfun-grandfathering', 'tokener-snapshot', 'unpriced-omitted', 'holiday-calendar-stale'] }
+    caveats: ['estimate-not-a-bill', 'shape-may-differ', 'stepfun-grandfathering', 'tokener-snapshot', 'unpriced-omitted', 'holiday-calendar-stale', 'compact-assumptions'] }
 }
 const loadModels = async (refresh, signal, provider = 'deepseek') => {
   await new Promise(resolve => setTimeout(resolve, provider === 'stepfun' ? 500 : 200))
