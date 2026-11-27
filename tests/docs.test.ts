@@ -34,6 +34,17 @@ describe('advisor documentation', () => {
     }
   })
 
+  it('embeds the narrow dark-theme screenshots', () => {
+    for (const name of ['advisor-dark-narrow-zh-tw', 'usage-dark-narrow-zh-tw']) {
+      expect(readme).toContain(`./docs/dsh-${name}.png`)
+      expect(existsSync(new URL(`docs/dsh-${name}.png`, root)), name).toBe(true)
+    }
+    for (const name of ['advisor-dark-narrow-en', 'usage-dark-narrow-en']) {
+      expect(readmeEn).toContain(`./docs/dsh-${name}.png`)
+      expect(existsSync(new URL(`docs/dsh-${name}.png`, root)), name).toBe(true)
+    }
+  })
+
   it('keeps the preview fixture aligned with the four-way advisor', () => {
     expect(preview).toMatch(/compact:\s*estimate\(/)
     expect(preview).toContain('compact-assumptions')

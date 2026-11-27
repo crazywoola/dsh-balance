@@ -163,6 +163,11 @@ providers:
 
 ![下轮费用估算卡片](./docs/dsh-advisor-card.png)
 
+窄屏（360px）深色主题：
+
+<img src="./docs/dsh-advisor-dark-narrow-zh-tw.png" alt="窄屏深色主题的下轮费用估算（繁體中文）" width="280" />
+<img src="./docs/dsh-usage-dark-narrow-zh-tw.png" alt="窄屏深色主题的用量页（繁體中文）" width="280" />
+
 这些数字是公开标准价估算，不是官方账单。StepFun `step-5-preview` 在使用 2026-10-14 之后的标准缓存命中价时，会注明账户可能仍享受 0.35 元／百万的保留价，插件无法识别。Tokener 按 2026-11-03 目录快照计价，不套用原厂价格或 DeepSeek 峰谷倍率。无法定价的模型会被省略，不会显示为 $0。美元与原生人民币分别展示；只有配置了 `usdToCny` 才会给出人民币合计。
 
 本机只读接口为 `GET /dsh-balance/api/advice?session=…`（也可用 `sessionId`），仅本机可访问，响应不含 prompt 或会话正文。本版本尚未提供可供模型调用的 agent tool；只读的 `dsh_balance_advise` 仍在[路线图](./ROADMAP.md)中。

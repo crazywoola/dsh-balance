@@ -55,13 +55,15 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### UI
 
-1. **Dark-theme/narrow screenshot refresh.** Re-capture the advisor card and Usage page docs screenshots (zh-TW and en, dark, ≤360px) with `pnpm preview` now that the preview renders the advisor.  _(patch docs)_
+1. ~~**Dark-theme/narrow screenshot refresh.**~~ _(shipped v0.15.4)_ Re-captured the advisor card and Usage page docs screenshots (zh-TW and en, dark, ≤360px) with `pnpm preview` now that the preview renders the advisor.  _(patch docs)_
 2. **Advisor dock polish.** Review the compact composer-dock advisor at narrow widths: wrap `now · after · fresh` as separate non-breaking amounts like the card.  _(patch fix)_
 
 Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
+
+- [x] v0.15.4 — [UI] Narrow dark-theme advisor/Usage screenshots (zh-TW, en) in READMEs. Follow-up idea: script the screenshots (`pnpm shots`) so they stay reproducible.
 
 - [x] v0.15.3 — [UX] Docs refresh (advisor/session screenshots, estimates guide, README agent-tool note; preview fixture includes /compact).
 

@@ -8,6 +8,11 @@ for features, patch for fixes). Full notes for each version are on the
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-11-27
+
+### Changed
+- [UI] Docs screenshots: added narrow (360px) dark-theme captures of the advisor card and the Usage page in zh-TW and en, taken with `pnpm preview`, and embedded them in both READMEs.
+
 ## [0.15.3] - 2026-11-27
 
 ### Added
