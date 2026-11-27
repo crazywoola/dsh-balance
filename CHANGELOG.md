@@ -8,6 +8,11 @@ for features, patch for fixes). Full notes for each version are on the
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-11-27
+
+### Fixed
+- [Bugfix] zh-TW terminology review: replaced mainland-only wording with Taiwan usage (供應商, 工作階段, 尖峰/離峰, 權限, 控制台, 存取, 參數, 逾時, 自訂, 清單, 回應, 「」 quotes), fixed “back to overview” (返回總覽); placeholders unchanged. Added a terminology regression test.
+
 ## [0.15.1] - 2026-11-26
 
 ### Added
