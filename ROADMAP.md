@@ -33,7 +33,7 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 ### Bugfix
 
-1. **zh-TW terminology review.** The 0.14.3 zh-TW dictionary was converted from zh with OpenCC (s2twp) plus manual term fixes; have a native reader review billing/advice wording and fix mistranslations, keeping `{placeholders}` intact.  _(patch fix)_
+1. ~~**zh-TW terminology review.**~~ _(shipped v0.15.2)_ Next idea: have a native reader spot-check advice/billing wording in context.
 
 ### Features
 
@@ -60,6 +60,8 @@ Hotfixes (upstream DSH breaking a plugin API, official price changes) jump the
 queue and ship as patch releases.
 
 ## Done
+
+- [x] v0.15.2 — [Bugfix] zh-TW terminology review (Taiwan wording, regression test).
 
 - [x] v0.15.1 — [Stability] GitHub Actions CI (pnpm check on Node 24.22.x/26.x, tag-version check).
 

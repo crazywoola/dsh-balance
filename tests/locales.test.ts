@@ -45,3 +45,12 @@ describe('zh-TW locale', () => {
     }
   })
 })
+
+describe('zh-TW terminology', () => {
+  it('avoids mainland-only terms', () => {
+    const banned = ['響應', '許可權', '控制檯', '訪問', '引數', '超時', '自定義', '列表', '提供方', '會話', '高峰', '低谷', '“', '回傳總覽']
+    for (const [key, value] of Object.entries(zhTW)) {
+      for (const term of banned) expect(value, `${key}: ${term}`).not.toContain(term)
+    }
+  })
+})
