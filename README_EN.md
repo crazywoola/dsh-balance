@@ -161,6 +161,11 @@ The token shape is the per-bucket median of the session’s most recent 8 priced
 
 ![Session drill-down with the estimate card](./docs/dsh-session-drilldown-en.png)
 
+Narrow (360px) dark theme:
+
+<img src="./docs/dsh-advisor-dark-narrow-en.png" alt="Next-turn estimate card, narrow dark theme" width="280" />
+<img src="./docs/dsh-usage-dark-narrow-en.png" alt="Usage page, narrow dark theme" width="280" />
+
 These figures are published-rate estimates, not an official bill. When the post-2026-10-14 standard StepFun `step-5-preview` cache-hit rate is used, the UI notes that some accounts may still be grandfathered at 0.35 CNY per million tokens; the plugin cannot detect that. Tokener estimates use the 2026-11-03 catalog snapshot, without vendor rates or the DeepSeek peak multiplier. Unpriced models are omitted rather than shown as $0. Native USD and CNY are shown separately; a combined CNY total appears only when `usdToCny` is set.
 
 The local read-only route is `GET /dsh-balance/api/advice?session=…` (`sessionId` is also accepted), loopback-only, and the payload never includes prompt or session text. This version has no agent tool the model can call; a read-only `dsh_balance_advise` tool is still on the [roadmap](./ROADMAP.md).
