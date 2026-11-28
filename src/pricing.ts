@@ -86,12 +86,24 @@ function isPeakCalendarDay(date: Date): boolean {
   return weekday >= 1 && weekday <= 5 && !CHINESE_PUBLIC_HOLIDAYS.has(dateKey)
 }
 
-/** Whether the given instant falls inside a DeepSeek peak-pricing window. */
-export function isPeakHour(date: Date): boolean {
-  if (date.getTime() < PEAK_EFFECTIVE_FROM) return false
+/** Beijing calendar date `YYYY-MM-DD` for a given instant. */
+export function beijingDateKey(date: Date): string {
+  return beijingCalendar(date).dateKey
+}
+
+/** Whether the Beijing clock falls in Mon–Fri 09:00–12:00 or 14:00–18:00, excluding Chinese public holidays.
+ * Unlike `isPeakHour`, this has no provider-specific effective-from gate.
+ */
+export function isChineseStatutoryPeakHour(date: Date): boolean {
   if (!isPeakCalendarDay(date)) return false
   const hour = beijingCalendar(date).hour
   return PEAK_WINDOWS.some(([start, end]) => hour >= start && hour < end)
+}
+
+/** Whether the given instant falls inside a DeepSeek peak-pricing window. */
+export function isPeakHour(date: Date): boolean {
+  if (date.getTime() < PEAK_EFFECTIVE_FROM) return false
+  return isChineseStatutoryPeakHour(date)
 }
 
 /** The next instant at which the current pricing period ends (Beijing time). */

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last researched: 2026-11-27. This is the ranked backlog for the automated
+Last researched: 2026-11-28. This is the ranked backlog for the automated
 evolution routine. Each item is sized to ship as one release in a single run:
 implement → `pnpm check` → PR → squash-merge → tag → GitHub release.
 Take the highest unchecked item, unless an upstream break or a pricing change
@@ -28,7 +28,7 @@ Organized by area; ranks within each area are priority order. Pick the area serv
 
 1. **DSH 0.2.3 compatibility pass.** Verify install/start on `dsh-v0.2.3-alpha.2` (Node ≥ 24.22.3 / ≥ 26.13.1): peer ranges under standard semver also admit 0.2.3 prereleases; usage from forked/branch sessions (0.2.2-rc.2 SubAgent/AgentTeam, 0.2.3 branch sessions) is not double-counted with the parent; sessions in the official SQLite store are read. Add fixtures for each.  _(was #2, patch fix)_
 2. ~~**CI.**~~ _(shipped v0.15.1)_ GitHub Actions workflow running `pnpm check` on PRs and `main` (Node 24.22.x and 26.x), plus a release-tag job that verifies `package.json` version matches the tag.  _(was #3, patch chore)_
-3. **Catalog freshness check.** `scripts/check-prices.mjs` fetches the official DeepSeek (zh/en) and StepFun pricing pages and diffs against the tables in `src/billing.ts`; optional scheduled workflow opens an issue on drift.  _(was #10, patch chore)_
+3. **Catalog freshness check.** `scripts/check-prices.mjs` fetches the official DeepSeek (zh/en) and StepFun pricing pages, plus Tokener's machine-readable public catalog (`https://console.tokener.ai/api/public/v1/models`), and diffs against the tables in `src/billing.ts` / `src/tokener-pricing.ts`; optional scheduled workflow opens an issue on drift.  _(was #10, patch chore)_
 4. **npm publish on release** (blocked: needs an `NPM_TOKEN` repo secret or npm trusted publishing set up by the owner). Workflow publishes with provenance when a `v*` GitHub release is published.  _(was #16, patch chore)_
 
 ### Bugfix

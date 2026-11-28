@@ -1,7 +1,8 @@
 import { findBalanceProvider } from './providers.ts'
-import { isBeyondHolidayCalendar, isPeakHour, nextPeriodChange, PEAK_EFFECTIVE_FROM } from './pricing.ts'
+import { beijingDateKey, isBeyondHolidayCalendar, isPeakHour, nextPeriodChange, PEAK_EFFECTIVE_FROM } from './pricing.ts'
 import type { BillingPrice, BillingUsage, UsageFailure, UsageRequestRecord } from './billing.ts'
 import { calculateRequestCost, resolveBillingPrice } from './billing.ts'
+import { isTokenerOffPeak, TOKENER_OFFPEAK_VALID_THROUGH } from './tokener-pricing.ts'
 
 export const ADVICE_ROUTE = '/dsh-balance/api/advice'
 /** Number of recent priced requests used to form the next-turn token shape. */
@@ -95,9 +96,38 @@ function combinedCny(costUsd: number | null, costCny: number | undefined, usdToC
   return roundMoney((costCny ?? 0) + (costUsd ?? 0) * usdToCny)
 }
 
-function periodFor(provider: string, at: Date): AdvicePeriod {
-  if (findBalanceProvider(provider)?.id !== 'deepseek' || at.getTime() < PEAK_EFFECTIVE_FROM) return 'standard'
-  return isPeakHour(at) ? 'peak' : 'off-peak'
+function hasTokenerOffPeak(price: BillingPrice | undefined): boolean {
+  return price !== undefined && price.currency !== 'CNY' && price.offPeakRates !== undefined
+}
+
+function periodFor(provider: string, model: string, at: Date, overrides: readonly BillingPrice[] = []): AdvicePeriod {
+  const providerId = findBalanceProvider(provider)?.id
+  if (providerId === 'deepseek') {
+    if (at.getTime() < PEAK_EFFECTIVE_FROM) return 'standard'
+    return isPeakHour(at) ? 'peak' : 'off-peak'
+  }
+  if (providerId === 'tokener') {
+    const price = resolveBillingPrice(provider, model, at.getTime(), overrides)
+    if (!hasTokenerOffPeak(price)) return 'standard'
+    return isTokenerOffPeak(at) ? 'off-peak' : 'peak'
+  }
+  return 'standard'
+}
+
+function nextChangeFor(provider: string, model: string, at: Date, overrides: readonly BillingPrice[] = []): Date | undefined {
+  const period = periodFor(provider, model, at, overrides)
+  if (period === 'standard') return undefined
+  const providerId = findBalanceProvider(provider)?.id
+  if (providerId === 'tokener') {
+    const next = nextPeriodChange(at)
+    if (beijingDateKey(next) > TOKENER_OFFPEAK_VALID_THROUGH) {
+      if (period !== 'off-peak') return undefined
+      // Official pages: after validThrough, peak prices apply. 16:00Z is 00:00 the next Beijing day.
+      return new Date(`${TOKENER_OFFPEAK_VALID_THROUGH}T16:00:00Z`)
+    }
+    return next
+  }
+  return nextPeriodChange(at)
 }
 
 /** Median of a non-empty list of non-negative token counts, rounded to an integer. */
@@ -218,7 +248,7 @@ function estimate(
     provider: providerId,
     model,
     at: at.toISOString(),
-    period: periodFor(providerId, at),
+    period: periodFor(providerId, model, at, overrides),
     pricingVersion: price.pricingVersion,
     ...money(cost, price, usdToCny),
   }
@@ -274,9 +304,7 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
   const now = current !== undefined && tokenShape !== undefined
     ? estimate('now', current.provider, current.model, tokenShape, at, overrides, usdToCny)
     : undefined
-  const nextChange = current !== undefined && findBalanceProvider(current.provider)?.id === 'deepseek'
-    ? nextPeriodChange(at)
-    : undefined
+  const nextChange = current === undefined ? undefined : nextChangeFor(current.provider, current.model, at, overrides)
   const afterChange = current !== undefined && tokenShape !== undefined && nextChange !== undefined
     ? estimate('after-change', current.provider, current.model, tokenShape, nextChange, overrides, usdToCny)
     : undefined
@@ -359,7 +387,7 @@ export function buildAdvice(input: AdviceInput): AdviceSuccess {
     estimateOnly: true,
     sessionId: input.sessionId,
     fetchedAt: at.toISOString(),
-    currentPeriod: current === undefined ? (at.getTime() >= PEAK_EFFECTIVE_FROM && isPeakHour(at) ? 'peak' : at.getTime() >= PEAK_EFFECTIVE_FROM ? 'off-peak' : 'standard') : periodFor(current.provider, at),
+    currentPeriod: current === undefined ? (at.getTime() >= PEAK_EFFECTIVE_FROM && isPeakHour(at) ? 'peak' : at.getTime() >= PEAK_EFFECTIVE_FROM ? 'off-peak' : 'standard') : periodFor(current.provider, current.model, at, overrides),
     nextChangeAt: nextChange?.toISOString() ?? null,
     sampleSize: sample.length,
     sampleLimit,

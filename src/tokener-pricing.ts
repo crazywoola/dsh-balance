@@ -1,11 +1,51 @@
-/** USD per million tokens from https://www.tokener.ai/zh/models, checked 2026-11-03.
- * Reference estimates for conversation/reasoning models, not historical account bills.
- * Model IDs are exact and case-sensitive. No provider-native rates or peak multipliers apply.
- * Cache-write pricing is not published in this catalog; requests with cache writes stay unpriced.
- */
-export const TOKENER_PRICING_VERSION = 'tokener-reference-2026-11-03'
+import { beijingDateKey, isChineseStatutoryPeakHour } from './pricing.ts'
 
-export const TOKENER_PRICES: Readonly<Record<string, readonly [input: number, cacheRead: number, output: number]>> = {
+/** USD per million tokens from the public Tokener catalog.
+ * Current snapshot checked 2026-11-28 against
+ * https://console.tokener.ai/api/public/v1/models
+ * (schemaVersion 1, catalogRevision sha256:d6e160bc81b620b91cb7b6c263fb2487d0e0060f84e651b3b06d6ca9b77bcf31),
+ * https://www.tokener.ai/docs/guides/models, and model pages such as
+ * https://www.tokener.ai/models/deepseek-flash and
+ * https://www.tokener.ai/models/claude-haiku-5-5.
+ * Model IDs are exact and case-sensitive. These are reference estimates, not account bills.
+ * Cache-write pricing is not published; requests with cache writes stay unpriced.
+ * Embedding models are priced on input only; a cache-read rate is not published for them.
+ */
+export const TOKENER_PRICING_VERSION = 'tokener-reference-2026-11-28'
+export const TOKENER_LEGACY_PRICING_VERSION = 'tokener-reference-2026-11-03'
+/** Re-verification instant for rate changes noticed on 2026-11-28. Not a vendor-published effective date. */
+export const TOKENER_CURRENT_EFFECTIVE_FROM = Date.parse('2026-11-28T00:00:00+08:00')
+
+/** Official off-peak calendar window from Tokener model pages / catalog `offPeakPricing.calendar`. */
+export const TOKENER_OFFPEAK_VALID_FROM = '2026-01-01'
+export const TOKENER_OFFPEAK_VALID_THROUGH = '2027-12-31'
+
+export interface TokenerUsdRates {
+  cacheMissUsdPerMillion: number
+  cacheHitUsdPerMillion: number
+  outputUsdPerMillion: number
+}
+
+export interface TokenerContextTier extends TokenerUsdRates {
+  thresholdTokens: number
+}
+
+export interface TokenerModelQuote {
+  rates: TokenerUsdRates
+  contextPriceTiers?: readonly TokenerContextTier[]
+  offPeakRates?: TokenerUsdRates
+  /** Cache-read rate is unpublished; usage with cache reads stays unpriced. */
+  unpublishedCacheRead?: true
+}
+
+function rates(cacheMissUsdPerMillion: number, cacheHitUsdPerMillion: number, outputUsdPerMillion: number): TokenerUsdRates {
+  return { cacheMissUsdPerMillion, cacheHitUsdPerMillion, outputUsdPerMillion }
+}
+
+/** Last known public-catalog rates from the 2026-11-03 snapshot.
+ * Kept so IDs that left the public catalog, and pre-change rates for repriced models, can still be estimated.
+ */
+export const TOKENER_LEGACY_PRICES: Readonly<Record<string, readonly [input: number, cacheRead: number, output: number]>> = {
   'claude-fable-5': [10.0, 1.0, 50.0],
   'claude-fable-5-1': [10.0, 0.25, 50.0],
   'claude-haiku-4-5-20251001': [1.0, 0.1, 5.0],
@@ -109,3 +149,173 @@ export const TOKENER_PRICES: Readonly<Record<string, readonly [input: number, ca
   'qwen-plus-2025-04-28': [1.2, 0.24, 12.0],
   'qwen-plus-latest': [1.2, 0.24, 12.0],
 }
+
+/** Public catalog models as of 2026-11-28 (38 entries). */
+export const TOKENER_CURRENT_PRICES: Readonly<Record<string, TokenerModelQuote>> = {
+  'claude-fable-5': {
+    rates: rates(10.0, 1.0, 50.0),
+  },
+  'claude-fable-5-1': {
+    rates: rates(10.0, 0.25, 50.0),
+  },
+  'claude-fable-5-2': {
+    rates: rates(8.0, 0.2, 40.0),
+  },
+  'claude-haiku-4-5-20251001': {
+    rates: rates(1.0, 0.1, 5.0),
+  },
+  'claude-haiku-5-5': {
+    rates: rates(0.1, 0.01, 0.5),
+    contextPriceTiers: [
+      { thresholdTokens: 100001, ...rates(0.5, 0.05, 2.5) },
+    ],
+  },
+  'claude-opus-4-5-20251101': {
+    rates: rates(5.0, 0.5, 25.0),
+  },
+  'claude-opus-4-6': {
+    rates: rates(5.0, 0.5, 25.0),
+  },
+  'claude-opus-4-7': {
+    rates: rates(5.0, 0.5, 25.0),
+  },
+  'claude-opus-4-8': {
+    rates: rates(5.0, 0.5, 25.0),
+  },
+  'claude-opus-5': {
+    rates: rates(5.0, 0.5, 25.0),
+  },
+  'claude-opus-5-5': {
+    rates: rates(4.0, 0.2, 20.0),
+  },
+  'claude-sonnet-4-5-20250929': {
+    rates: rates(3.0, 0.3, 15.0),
+  },
+  'claude-sonnet-4-6': {
+    rates: rates(3.0, 0.3, 15.0),
+  },
+  'claude-sonnet-5': {
+    rates: rates(2.0, 0.2, 10.0),
+  },
+  'claude-sonnet-5-5': {
+    rates: rates(2.0, 0.1, 10.0),
+  },
+  'deepseek-flash': {
+    rates: rates(0.3, 0.006, 1.2),
+    offPeakRates: rates(0.15, 0.003, 0.6),
+  },
+  'deepseek-v3.2': {
+    rates: rates(0.62, 0.62, 1.85),
+  },
+  'deepseek-v4-pro': {
+    rates: rates(1.32, 0.044, 3.96),
+    offPeakRates: rates(0.66, 0.022, 1.98),
+  },
+  // priced on input only
+  'embed-english-v3': {
+    rates: rates(0.1, 0, 0),
+    unpublishedCacheRead: true,
+  },
+  // priced on input only
+  'embed-multilingual-v3': {
+    rates: rates(0.1, 0, 0),
+    unpublishedCacheRead: true,
+  },
+  // priced on input only
+  'embed-v4': {
+    rates: rates(0.12, 0, 0),
+    unpublishedCacheRead: true,
+  },
+  'glm-4.7': {
+    rates: rates(0.6, 0.6, 2.2),
+  },
+  'glm-4.7-flash': {
+    rates: rates(0.07, 0.07, 0.4),
+  },
+  'glm-5': {
+    rates: rates(1.0, 0.2, 3.2),
+  },
+  'grok-4.3': {
+    rates: rates(1.25, 0.2, 2.5),
+  },
+  'grok-4.6': {
+    rates: rates(2.0, 0.5, 6.0),
+  },
+  'grok-4.7': {
+    rates: rates(2.0, 0.5, 6.0),
+  },
+  'kimi-k3': {
+    rates: rates(3.0, 0.3, 15.0),
+  },
+  'kimi-k3.1': {
+    rates: rates(4.0, 0.2, 20.0),
+  },
+  'kimi-k3.1-pro': {
+    rates: rates(2.0, 0.2, 10.0),
+  },
+  // deprecated in the public catalog, still listed
+  'MiniMax-M2.5': {
+    rates: rates(0.3, 0.03, 1.2),
+  },
+  'qwen3-235b-a22b-2507': {
+    rates: rates(0.22, 0.22, 0.88),
+  },
+  'qwen3-32b': {
+    rates: rates(0.15, 0.15, 0.6),
+  },
+  'qwen3-coder-30b-a3b': {
+    rates: rates(0.15, 0.15, 0.6),
+  },
+  'qwen3-coder-480b-a35b': {
+    rates: rates(0.45, 0.45, 1.8),
+  },
+  'qwen3-coder-next': {
+    rates: rates(0.5, 0.5, 1.2),
+  },
+  'qwen3-next-80b-a3b': {
+    rates: rates(0.15, 0.15, 1.2),
+  },
+  'qwen3-vl-235b-a22b': {
+    rates: rates(0.53, 0.53, 2.66),
+  },
+}
+
+/** Models whose public-catalog rates changed between the 2026-11-03 snapshot and the 2026-11-28 check. */
+export const TOKENER_REPRICED_MODELS: ReadonlySet<string> = new Set([
+  'claude-haiku-5-5',
+  'grok-4.3',
+  'grok-4.6',
+])
+
+/** Whether Tokener official off-peak rates apply at `date`.
+ * Off-peak is every time outside Mon–Fri 09:00–12:00 and 14:00–18:00 Beijing time,
+ * excluding Chinese public holidays, including weekend makeup workdays.
+ * Official model pages: off-peak prices apply only from 2026-01-01 through 2027-12-31;
+ * outside that window, peak (base catalog) prices apply. Prices use the billing time.
+ */
+export function isTokenerOffPeak(date: Date): boolean {
+  const key = beijingDateKey(date)
+  if (key < TOKENER_OFFPEAK_VALID_FROM || key > TOKENER_OFFPEAK_VALID_THROUGH) return false
+  return !isChineseStatutoryPeakHour(date)
+}
+
+/** Total input tokens used to match `contextPriceTiers`, including cached tokens. */
+export function tokenerInputCount(usage: { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number {
+  return usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+}
+
+/** Pick the official rates for a Tokener quote at a given usage shape and billing time. */
+export function selectTokenerRates(quote: TokenerModelQuote, usage: { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }, at: Date): TokenerUsdRates {
+  const base = quote.offPeakRates !== undefined && isTokenerOffPeak(at) ? quote.offPeakRates : quote.rates
+  const tiers = quote.contextPriceTiers
+  if (tiers === undefined || tiers.length === 0) return base
+  const inputCount = tokenerInputCount(usage)
+  let matched: TokenerContextTier | undefined
+  for (const tier of tiers) {
+    if (inputCount >= tier.thresholdTokens && (matched === undefined || tier.thresholdTokens > matched.thresholdTokens)) {
+      matched = tier
+    }
+  }
+  return matched ?? base
+}
+

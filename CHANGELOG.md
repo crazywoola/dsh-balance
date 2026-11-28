@@ -8,6 +8,15 @@ for features, patch for fixes). Full notes for each version are on the
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-28
+
+### Added
+- [Features] Tokener catalog refresh: re-checked the official public catalog on 2026-11-28, added missing models (including context-tier `claude-haiku-5-5`, official off-peak `deepseek-flash` / `deepseek-v4-pro`, and input-only embedding models), and kept the 2026-11-03 snapshot for IDs that left the public catalog.
+- [Features] The advisor now offers “wait for off-peak” for Tokener models that publish official off-peak rates, using Tokener's calendar window (2026-01-01 through 2027-12-31).
+
+### Changed
+- [Features] Tokener `grok-4.3` and `grok-4.6` rates, and `claude-haiku-5-5` context tiers, follow the 2026-11-28 catalog from 00:00 Beijing time on that day; earlier requests keep the previous snapshot.
+
 ## [0.15.4] - 2026-11-27
 
 ### Changed
@@ -88,7 +97,9 @@ for features, patch for fixes). Full notes for each version are on the
 ### Added
 - Tokener usage statistics; support DSH `0.2.1-rc.5`.
 
-[Unreleased]: https://github.com/crazywoola/dsh-balance/compare/v0.15.3...HEAD
+[Unreleased]: https://github.com/crazywoola/dsh-balance/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/crazywoola/dsh-balance/compare/v0.15.4...v0.16.0
+[0.15.4]: https://github.com/crazywoola/dsh-balance/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/crazywoola/dsh-balance/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/crazywoola/dsh-balance/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/crazywoola/dsh-balance/compare/v0.15.0...v0.15.1
