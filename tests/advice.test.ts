@@ -242,12 +242,31 @@ describe('buildAdvice', () => {
       })],
       at,
     })
-    expect(tokener.currentPeriod).toBe('standard')
-    expect(tokener.nextChangeAt).toBeNull()
-    expect(tokener.afterChange).toBeUndefined()
-    expect(tokener.now?.period).toBe('standard')
+    expect(tokener.currentPeriod).toBe('peak')
+    expect(tokener.nextChangeAt).toBe(new Date('2026-09-10T10:00:00Z').toISOString()) // 18:00 Beijing off-peak
+    expect(tokener.afterChange?.period).toBe('off-peak')
+    expect(tokener.afterChange?.costUsd).toBe(expectedCost('tokener', 'deepseek-flash', tokenerShape, new Date('2026-09-10T10:00:00Z')))
+    expect(tokener.now?.period).toBe('peak')
     expect(tokener.now?.costUsd).toBe(expectedCost('tokener', 'deepseek-flash', tokenerShape, new Date('2026-09-10T08:00:00Z')))
+    expect(tokener.now?.costUsd).toBeGreaterThan(tokener.afterChange?.costUsd ?? 0)
     expect(tokener.caveats).toContain('tokener-snapshot')
+
+    const flat = buildAdvice({
+      sessionId: 'session-a',
+      records: [record({
+        seq: 1,
+        time: at.toISOString(),
+        provider: 'tokener',
+        model: 'claude-sonnet-4-6',
+        ...tokenerShape,
+        costUsd: expectedCost('tokener', 'claude-sonnet-4-6', tokenerShape, at),
+      })],
+      at,
+    })
+    expect(flat.currentPeriod).toBe('standard')
+    expect(flat.nextChangeAt).toBeNull()
+    expect(flat.afterChange).toBeUndefined()
+    expect(flat.now?.period).toBe('standard')
   })
 
   it('adds combined CNY only when usdToCny is set, and reports an empty sample honestly', () => {

@@ -373,13 +373,56 @@ describe('Tokener usage', () => {
     requestHeader(0, at, provider, model), stepStart(1, 1, 0, at), assistant(2, usage, 1, 0, at),
   ]
 
-  it('uses Tokener catalog prices, not the model vendor prices or peak multiplier', () => {
+  it('uses Tokener catalog prices, not the model vendor prices or a DeepSeek 2x multiplier', () => {
     const price = resolveBillingPrice('TOKENER.AI', 'deepseek-v4-pro', time(at))!
-    expect(price).toMatchObject({ provider: 'tokener', pricingVersion: 'tokener-reference-2026-11-03' })
+    expect(price).toMatchObject({ provider: 'tokener', pricingVersion: 'tokener-reference-2026-11-28' })
     const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    // 09:00 Beijing weekday peak: official peak rates $1.32 / $0.044 / $3.96.
     expect(calculateRequestCost(usage, price, time(at))).toBe(5.324)
-    expect(calculateRequestCost(usage, price, time('2026-11-03T00:00:00Z'))).toBe(5.324)
+    // 08:00 Beijing the same day is official off-peak: $0.66 / $0.022 / $1.98.
+    expect(calculateRequestCost(usage, price, time('2026-11-03T00:00:00Z'))).toBe(2.662)
     expect(resolveBillingPrice('tokener', 'deepseek-chat', time(at))).toBeUndefined()
+  })
+
+  it('applies official Tokener off-peak rates only inside the published calendar window', () => {
+    const price = resolveBillingPrice('tokener', 'deepseek-flash', time('2026-06-01T01:00:00Z'))!
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    expect(calculateRequestCost(usage, price, time('2026-06-01T01:00:00Z'))).toBe(0.3) // weekday peak
+    expect(calculateRequestCost(usage, price, time('2026-06-01T00:00:00Z'))).toBe(0.15) // weekday off-peak
+    expect(calculateRequestCost(usage, price, time('2026-05-31T01:00:00Z'))).toBe(0.15) // Sunday
+    // 2028-01-03 09:00 Beijing is a Monday after validThrough: official pages say peak prices apply.
+    expect(calculateRequestCost(usage, price, time('2028-01-03T01:00:00Z'))).toBe(0.3)
+    expect(calculateRequestCost(usage, price, time('2025-12-31T00:00:00Z'))).toBe(0.3)
+  })
+
+  it('matches claude-haiku-5-5 context tiers on total input including cached tokens', () => {
+    const after = resolveBillingPrice('tokener', 'claude-haiku-5-5', time('2026-11-28T00:00:00+08:00'))!
+    expect(after).toMatchObject({ pricingVersion: 'tokener-reference-2026-11-28', cacheMissUsdPerMillion: 0.1 })
+    const below = { inputTokens: 50_000, cacheReadTokens: 50_000, cacheWriteTokens: 0, outputTokens: 1_000_000 }
+    // 100_000 total input stays on the base tier $0.10 / $0.01 / $0.50; 100_001 crosses the official threshold.
+    expect(calculateRequestCost(below, after, time('2026-11-28T00:00:00Z'))).toBe(0.5055)
+    expect(calculateRequestCost({ ...below, inputTokens: 50_001 }, after, time('2026-11-28T00:00:00Z'))).toBe(
+      (50_001 * 0.5 + 50_000 * 0.05 + 1_000_000 * 2.5) / 1_000_000,
+    )
+    const before = resolveBillingPrice('tokener', 'claude-haiku-5-5', time('2026-11-27T15:59:59Z'))!
+    expect(before.pricingVersion).toBe('tokener-reference-2026-11-03')
+    expect(calculateRequestCost(below, before, time('2026-11-27T15:59:59Z'))).toBe(2.5275)
+  })
+
+  it('keeps pre-change Grok rates until the 2026-11-28 re-check, and prices new and departed catalog IDs', () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    const oldGrok = resolveBillingPrice('tokener', 'grok-4.3', time('2026-11-27T15:59:59Z'))!
+    const newGrok = resolveBillingPrice('tokener', 'grok-4.3', time('2026-11-28T00:00:00+08:00'))!
+    expect(oldGrok).toMatchObject({ pricingVersion: 'tokener-reference-2026-11-03', cacheMissUsdPerMillion: 2.5 })
+    expect(newGrok).toMatchObject({ pricingVersion: 'tokener-reference-2026-11-28', cacheMissUsdPerMillion: 1.25 })
+    expect(calculateRequestCost(usage, oldGrok, time('2026-11-27T15:59:59Z'))).toBe(2.5)
+    expect(calculateRequestCost(usage, newGrok, time('2026-11-28T00:00:00+08:00'))).toBe(1.25)
+    expect(resolveBillingPrice('tokener', 'claude-fable-5-2', time('2026-11-01T00:00:00Z'))).toMatchObject({
+      cacheMissUsdPerMillion: 8, cacheHitUsdPerMillion: 0.2, outputUsdPerMillion: 40,
+    })
+    expect(resolveBillingPrice('tokener', 'gpt-5.4', time('2026-11-28T00:00:00Z'))).toMatchObject({
+      pricingVersion: 'tokener-reference-2026-11-03', outputUsdPerMillion: 22.5,
+    })
   })
 
   it('aggregates aliases, preserves disjoint cached tokens, and supports provider/date filtering', () => {
@@ -406,6 +449,10 @@ describe('Tokener usage', () => {
     const writes = extractSessionUsage('writes', 0, eventsFor('tokener', 'claude-sonnet-4-6', { inputTokens: 10, outputTokens: 2, cacheWriteTokens: 100 }), utcOptions)
     expect(writes[0]).toMatchObject({ cacheWriteTokens: 100, costUsd: null, billingStatus: 'unpriced', unknownReason: 'unknown-cache-write-price' })
     expect(extractSessionUsage('missing', 0, eventsFor('tokener', 'gpt-5.4', undefined), utcOptions)[0]?.unknownReason).toBe('missing-usage')
+    const embedding = extractSessionUsage('embed', 0, eventsFor('tokener', 'embed-v4', { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0 }), utcOptions)
+    expect(embedding[0]).toMatchObject({ billingStatus: 'priced', costUsd: 0.12, pricingVersion: 'tokener-reference-2026-11-28' })
+    const embedHits = extractSessionUsage('embed-hits', 0, eventsFor('tokener', 'embed-v4', { inputTokens: 10, outputTokens: 0, cacheReadTokens: 5 }), utcOptions)
+    expect(embedHits[0]).toMatchObject({ billingStatus: 'unpriced', unknownReason: 'unknown-cache-read-price', costUsd: null })
   })
 })
 

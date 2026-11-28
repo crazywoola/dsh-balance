@@ -140,7 +140,7 @@ providers:
 
 统计仅覆盖当前 dsh 保存的本地会话，不包含其他客户端或整个组织的调用，也不提供 API Key 维度。请求数、输入、输出、缓存读取与缓存写入按 dsh 标准化的 usage 统计；缓存读取已从标准化输入中拆出，不重复计数。支持提供方、模型、会话、日期和活动时段明细，提供方别名统一归为 Tokener。
 
-内置 2026-11-03 核验的 [Tokener 模型目录](https://www.tokener.ai/zh/models) 对话/推理模型美元参考价，逐个匹配完整模型 ID。使用 Tokener 目录价格，不套用原厂价格或 DeepSeek 峰谷倍率。参考价快照同样用于已有历史记录的估算，不代表历史实际扣款。未知模型、缺少 usage，以及包含未公开价格的缓存写入请求，保留请求数与 token 并标为“未计费”。账户余额、折扣和实际消费以 [Tokener 控制台](https://console.tokener.ai) 为准。
+内置 2026-11-28 对照 [公开机器可读目录](https://console.tokener.ai/api/public/v1/models) 与 [Tokener 模型说明](https://www.tokener.ai/docs/guides/models) 核验的美元参考价，逐个匹配完整模型 ID。使用 Tokener 目录价格，不套用原厂价格或 DeepSeek 的 2 倍峰谷倍率。目录中公布了官方低谷价的模型（目前为 `deepseek-flash`、`deepseek-v4-pro`）按 [模型页](https://www.tokener.ai/models/deepseek-flash) 的规则计价：北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰（不含中国法定节假日），其余时间为低谷（含周末补班）；低谷价仅适用于 2026-01-01 至 2027-12-31，窗口之外按高峰价。有上下文分档的模型（目前为 `claude-haiku-5-5`）按官方规则，用「含缓存在内的输入 token 数」匹配分档，整次请求套用该档的输入、缓存读取和输出单价。嵌入模型按官方「只计输入」计价；缓存读取单价未公布时，带缓存读取的请求标为未计费。已离开公开目录的模型 ID 仍沿用 2026-11-03 快照，便于历史会话估算；2026-11-28 核验时发现改价的模型（`claude-haiku-5-5`、`grok-4.3`、`grok-4.6`）在该日 00:00 北京时间之前沿用旧快照。参考价不代表历史实际扣款。未知模型、缺少 usage，以及包含未公开价格的缓存写入（或嵌入模型的缓存读取）请求，保留请求数与 token 并标为“未计费”。账户余额、折扣和实际消费以 [Tokener 控制台](https://console.tokener.ai) 为准。
 
 ## 统计口径
 
@@ -168,7 +168,7 @@ providers:
 <img src="./docs/dsh-advisor-dark-narrow-zh-tw.png" alt="窄屏深色主题的下轮费用估算（繁體中文）" width="280" />
 <img src="./docs/dsh-usage-dark-narrow-zh-tw.png" alt="窄屏深色主题的用量页（繁體中文）" width="280" />
 
-这些数字是公开标准价估算，不是官方账单。StepFun `step-5-preview` 在使用 2026-10-14 之后的标准缓存命中价时，会注明账户可能仍享受 0.35 元／百万的保留价，插件无法识别。Tokener 按 2026-11-03 目录快照计价，不套用原厂价格或 DeepSeek 峰谷倍率。无法定价的模型会被省略，不会显示为 $0。美元与原生人民币分别展示；只有配置了 `usdToCny` 才会给出人民币合计。
+这些数字是公开标准价估算，不是官方账单。StepFun `step-5-preview` 在使用 2026-10-14 之后的标准缓存命中价时，会注明账户可能仍享受 0.35 元／百万的保留价，插件无法识别。Tokener 按 2026-11-28 公开目录计价，已计入官方低谷价和上下文分档（如有），不套用原厂价格或 DeepSeek 的 2 倍峰谷倍率。无法定价的模型会被省略，不会显示为 $0。美元与原生人民币分别展示；只有配置了 `usdToCny` 才会给出人民币合计。
 
 本机只读接口为 `GET /dsh-balance/api/advice?session=…`（也可用 `sessionId`），仅本机可访问，响应不含 prompt 或会话正文。本版本尚未提供可供模型调用的 agent tool；只读的 `dsh_balance_advise` 仍在[路线图](./ROADMAP.md)中。
 

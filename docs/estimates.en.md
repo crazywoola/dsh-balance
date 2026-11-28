@@ -22,7 +22,7 @@ If the session has no priced requests, the card explains that it cannot estimate
 | Option | How it is priced |
 | --- | --- |
 | Continue in the current period | The median usage, priced at **now** (peak, off-peak, or the provider’s standard rate). |
-| Wait for the next peak change | The same usage, priced at the next peak↔off-peak switch. Only official DeepSeek rates have a peak window; StepFun and Tokener do not use that multiplier, so this row is omitted. |
+| Wait for the next peak change | The same usage, priced at the next peak↔off-peak switch. Official DeepSeek rates, and Tokener models that publish official off-peak prices (such as `deepseek-flash` and `deepseek-v4-pro`), show this row. StepFun and other flat-rate Tokener models do not use DeepSeek's 2× multiplier, so the row is omitted. |
 | Compact now | Cost of the **summarizer request** plus the **first turn after compaction**. The summarizer reads the whole history (the already-cached prefix still hits) and is assumed to write about 4,000 output tokens, capped at one quarter of the history. After compaction, only the **smallest cache-hit prefix** seen in the session still hits; the summary and the new input miss. Output stays at the median. Actual summary length and the model used to compact may differ. |
 | Fresh session | Cache reads are treated as cache misses; output and cache writes are unchanged. This simulates a new session with no reusable prefix. |
 
@@ -32,7 +32,7 @@ If the session has no priced requests, the card explains that it cannot estimate
 
 - **DeepSeek**: [official USD rates](https://api-docs.deepseek.com/quick_start/pricing/) with Beijing-time peak hours. Peak is Monday–Friday 09:00–12:00 and 14:00–18:00, excluding Chinese public holidays; weekends and those holidays are all-day off-peak. The built-in holiday calendar currently runs through 2027; later dates are estimated as ordinary weekdays and the card says so.
 - **StepFun**: official standard CNY rates. The standard `step-5-preview` cache-hit rate is 0.70 CNY per million tokens from 2026-10-14; accounts that had already used the pay-as-you-go API before then may still be grandfathered at 0.35. The plugin cannot detect that, so it applies the standard effective-from date and notes the limitation.
-- **Tokener**: USD reference rates from the 2026-11-03 catalog snapshot, without vendor rates or the DeepSeek peak multiplier. A turn that includes an unpublished cache-write price is omitted from the estimate.
+- **Tokener**: USD reference rates from the 2026-11-28 public catalog, without vendor rates or DeepSeek's 2× peak multiplier. Official off-peak and context-tier rates are applied where the catalog publishes them. A turn that includes an unpublished cache-write price (or an unpublished cache-read price on an embedding model) is omitted from the estimate.
 - `pricingOverrides` are shared with usage accounting. A combined CNY total appears only when `usdToCny` is configured (or a display rate is entered on the usage page), and it is labeled as a fixed-rate conversion.
 
 Plans, discounts, account-specific rates, or unrecorded historical price changes can make the actual charge differ from the estimate.

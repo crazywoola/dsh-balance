@@ -1,7 +1,16 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { findBalanceProvider } from './providers.ts'
 import { FLASH_CURRENT_EFFECTIVE_FROM, isPeakHour, PEAK_EFFECTIVE_FROM } from './pricing.ts'
-import { TOKENER_PRICES, TOKENER_PRICING_VERSION } from './tokener-pricing.ts'
+import {
+  TOKENER_CURRENT_EFFECTIVE_FROM,
+  TOKENER_CURRENT_PRICES,
+  TOKENER_LEGACY_PRICES,
+  TOKENER_LEGACY_PRICING_VERSION,
+  TOKENER_PRICING_VERSION,
+  TOKENER_REPRICED_MODELS,
+  selectTokenerRates,
+  type TokenerModelQuote,
+} from './tokener-pricing.ts'
 
 export const USAGE_ROUTE = '/dsh-balance/api/usage'
 /** Current official DeepSeek Flash schedule, effective 2026-09-10 04:00 UTC. */
@@ -21,18 +30,27 @@ interface BillingPriceIdentity {
   pricingVersion: string
 }
 
-export type BillingPrice = BillingPriceIdentity & (PriceRates & { currency?: 'USD' } | {
-  currency: 'CNY'
-  cacheHitCnyPerMillion: number
-  cacheMissCnyPerMillion: number
-  outputCnyPerMillion: number
-})
-
 interface PriceRates {
   cacheHitUsdPerMillion: number
   cacheMissUsdPerMillion: number
   outputUsdPerMillion: number
 }
+
+interface UsdBillingPrice extends PriceRates {
+  currency?: 'USD'
+  contextPriceTiers?: TokenerModelQuote['contextPriceTiers']
+  offPeakRates?: TokenerModelQuote['offPeakRates']
+  unpublishedCacheRead?: true
+}
+
+interface CnyBillingPrice {
+  currency: 'CNY'
+  cacheHitCnyPerMillion: number
+  cacheMissCnyPerMillion: number
+  outputCnyPerMillion: number
+}
+
+export type BillingPrice = BillingPriceIdentity & (UsdBillingPrice | CnyBillingPrice)
 
 const FLASH_MODEL_IDS = ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'] as const
 
@@ -116,12 +134,50 @@ export const BILLING_PRICES: readonly BillingPrice[] = [
     provider: 'stepfun', model, currency: 'CNY' as const,
     effectiveFrom: new Date(effectiveFrom).toISOString(), pricingVersion, ...rates,
   })),
-  ...Object.entries(TOKENER_PRICES).map(([model, [input, cacheRead, output]]) => ({
-    provider: 'tokener', model,
-    effectiveFrom: new Date(0).toISOString(), pricingVersion: TOKENER_PRICING_VERSION,
-    cacheMissUsdPerMillion: input, cacheHitUsdPerMillion: cacheRead, outputUsdPerMillion: output,
-  })),
+  ...tokenerBillingPrices(),
 ]
+
+function tokenerUsdPrice(
+  model: string,
+  quote: TokenerModelQuote,
+  effectiveFrom: string,
+  pricingVersion: string,
+): BillingPrice {
+  return {
+    provider: 'tokener',
+    model,
+    effectiveFrom,
+    pricingVersion,
+    ...quote.rates,
+    ...(quote.contextPriceTiers === undefined ? {} : { contextPriceTiers: quote.contextPriceTiers }),
+    ...(quote.offPeakRates === undefined ? {} : { offPeakRates: quote.offPeakRates }),
+    ...(quote.unpublishedCacheRead === undefined ? {} : { unpublishedCacheRead: true }),
+  }
+}
+
+/** Historical 2026-11-03 snapshot plus the 2026-11-28 public catalog, with dated rows for repriced models. */
+function tokenerBillingPrices(): BillingPrice[] {
+  const epoch = new Date(0).toISOString()
+  const currentFrom = new Date(TOKENER_CURRENT_EFFECTIVE_FROM).toISOString()
+  const rows: BillingPrice[] = []
+  for (const [model, [input, cacheRead, output]] of Object.entries(TOKENER_LEGACY_PRICES)) {
+    if (model in TOKENER_CURRENT_PRICES && !TOKENER_REPRICED_MODELS.has(model)) continue
+    rows.push({
+      provider: 'tokener',
+      model,
+      effectiveFrom: epoch,
+      pricingVersion: TOKENER_LEGACY_PRICING_VERSION,
+      cacheMissUsdPerMillion: input,
+      cacheHitUsdPerMillion: cacheRead,
+      outputUsdPerMillion: output,
+    })
+  }
+  for (const [model, quote] of Object.entries(TOKENER_CURRENT_PRICES)) {
+    const effectiveFrom = TOKENER_REPRICED_MODELS.has(model) ? currentFrom : epoch
+    rows.push(tokenerUsdPrice(model, quote, effectiveFrom, TOKENER_PRICING_VERSION))
+  }
+  return rows
+}
 
 /** One user-configured price row; a complete USD or CNY triple is required. */
 export interface PricingOverrideInput {
@@ -198,7 +254,7 @@ export interface BillingUsage {
   cacheWriteTokens: number
 }
 
-export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unknown-model' | 'missing-request-metadata' | 'unknown-cache-write-price'
+export type BillingUnknownReason = 'missing-usage' | 'unknown-provider' | 'unknown-model' | 'missing-request-metadata' | 'unknown-cache-write-price' | 'unknown-cache-read-price'
 export type BillingStatus = 'priced' | 'free' | 'unpriced'
 
 export interface UsageRequestRecord {
@@ -467,7 +523,24 @@ export function findBillingPrice(provider: string, model: string): BillingPrice 
 
 /** Compute one request charge in the price's native currency. Cache writes are cache misses. */
 export function calculateRequestCost(usage: BillingUsage, price: BillingPrice, time: number): number {
-  const multiplier = findBalanceProvider(price.provider)?.id === 'deepseek' && isPeakHour(new Date(time)) ? 2 : 1
+  const providerId = findBalanceProvider(price.provider)?.id
+  if (providerId === 'tokener' && price.currency !== 'CNY') {
+    const rates = selectTokenerRates({
+      rates: {
+        cacheMissUsdPerMillion: price.cacheMissUsdPerMillion,
+        cacheHitUsdPerMillion: price.cacheHitUsdPerMillion,
+        outputUsdPerMillion: price.outputUsdPerMillion,
+      },
+      ...(price.contextPriceTiers === undefined ? {} : { contextPriceTiers: price.contextPriceTiers }),
+      ...(price.offPeakRates === undefined ? {} : { offPeakRates: price.offPeakRates }),
+    }, usage, new Date(time))
+    return roundMoney((
+      (usage.inputTokens + usage.cacheWriteTokens) * rates.cacheMissUsdPerMillion
+      + usage.cacheReadTokens * rates.cacheHitUsdPerMillion
+      + usage.outputTokens * rates.outputUsdPerMillion
+    ) / TOKENS_PER_MILLION)
+  }
+  const multiplier = providerId === 'deepseek' && isPeakHour(new Date(time)) ? 2 : 1
   const missTokens = usage.inputTokens + usage.cacheWriteTokens
   const missRate = price.currency === 'CNY' ? price.cacheMissCnyPerMillion : price.cacheMissUsdPerMillion
   const hitRate = price.currency === 'CNY' ? price.cacheHitCnyPerMillion : price.cacheHitUsdPerMillion
@@ -558,6 +631,9 @@ export function extractSessionUsage(
       const price = resolveBillingPrice(provider, model, time, options.pricingOverrides ?? [])
       if (price === undefined) unknownReason = findBalanceProvider(provider) !== undefined ? 'unknown-model' : 'unknown-provider'
       else if (provider === 'tokener' && usage.cacheWriteTokens > 0) unknownReason = 'unknown-cache-write-price'
+      else if (provider === 'tokener' && price.currency !== 'CNY' && price.unpublishedCacheRead && usage.cacheReadTokens > 0) {
+        unknownReason = 'unknown-cache-read-price'
+      }
       else {
         const cost = calculateRequestCost(usage, price, time)
         if (price.currency === 'CNY') costCny = cost
